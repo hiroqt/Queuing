@@ -16,7 +16,7 @@ Queuing/
 │   └── src/               # App.jsx, main.jsx, index.css
 ├── docs/                  # code map, specs, ADRs, decisions, templates, runbooks
 └── skills/
-    ├── change-documentation/ # default docs and delivery guidance
+    ├── project-knowledge/   # default shared knowledge, docs and delivery guidance
     └── clinic-queue/         # specialist guidance
 ```
 

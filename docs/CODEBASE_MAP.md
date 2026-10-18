@@ -20,6 +20,6 @@ This map describes the live starter checkout. Proposed clinic-queue behavior is 
 - The API and core library target .NET 10; the API is C# and the core library is VB.NET.
 - The frontend is React JavaScript with Vite. It has no test or typecheck script.
 - There is no backend test project, database integration, queue module, or production deployment configuration in the current source tree.
-- `skills/clinic-queue/` and `skills/change-documentation/` contain agent instructions, not application code.
+- `skills/clinic-queue/` and `skills/project-knowledge/` contain agent instructions, not application code.
 
 For the actual folders and phased growth guidance, see [`STRUCTURE.md`](STRUCTURE.md). Do not treat proposed capabilities as live code until they appear in the source and have verification evidence.

@@ -18,7 +18,7 @@ Keep this small structure until real features require more boundaries. The targe
 - `docs/STRUCTURE.md` — current tree and phased growth plan.
 - `docs/CODEBASE_MAP.md` — live source responsibilities and current gaps.
 - `docs/specs/` — feature specs and acceptance criteria.
-- `skills/change-documentation/SKILL.md` — default documentation and commit/PR guidance for all agents.
+- `skills/project-knowledge/SKILL.md` — default persistent-knowledge, documentation, and commit/PR guidance for all agents.
 - `skills/clinic-queue/SKILL.md` — specialist implementation and review guidance.
 
 ## Local commands

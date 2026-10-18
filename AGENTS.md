@@ -4,11 +4,11 @@
 Build and maintain a **basic clinic queue** toward the proposed React/TypeScript and ASP.NET Core architecture, starting with four capabilities: admin, staff, ticket issuance/printing, and public displays. Prefer simple, testable code that remains maintainable across years. The proposal is not evidence of the current stack: inspect the live solution first. The current checkout uses a C# ASP.NET Core API, a VB.NET core library, and a React JavaScript frontend. Preserve those project and language choices unless an approved spec authorizes a migration. This file applies to the whole repository; any child `AGENTS.md` may add stricter local rules, never relax security or scope.
 
 ## Required context before making changes
-1. **Always load `skills/change-documentation/SKILL.md` for every repository task**, whether or not the user invokes it by name.
-2. Read `README.md`, `PRD.md`, `ARD.md`, `SDD.md` and `docs/OPEN_DECISIONS.md`.
-3. Locate the approved feature under `docs/specs/`; read `spec.md`, `plan.md`, `tasks.md`, `acceptance.md`.
-4. For queue/auth/display/printing/configuration work, load `skills/clinic-queue/SKILL.md` and relevant referenced checklists.
-5. Examine actual code, tests, migrations and API contracts. Docs may describe desired, not current, state.
+1. **Always load `skills/project-knowledge/SKILL.md` for every repository task**, whether or not the user invokes it by name.
+2. Start with `README.md` and `docs/CODEBASE_MAP.md`; read `docs/STRUCTURE.md` for layout/architecture work.
+3. For behavior changes, read the relevant PRD/ARD/SDD sections, open decisions, and the approved feature spec; do not load unrelated specs or references.
+4. For queue/auth/display/printing/configuration work, load `skills/clinic-queue/SKILL.md` and only the relevant referenced checklists.
+5. Examine actual code, manifests, tests, migrations and API contracts. Docs may describe desired, not current, state.
 
 ## Mandatory SDD protocol
 **Specify → challenge assumptions → plan → contract/test design → implement one vertical slice → verify → review → document.** For substantive scope, permissions, schema, printing or workflow changes, do not implement without an approved spec and plan. When no reviewer is available, document assumptions/blocks and perform only safe in-scope scaffolding. Never mark work tested if a tool was unavailable.

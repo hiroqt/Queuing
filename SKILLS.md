@@ -4,7 +4,7 @@ This is the **skill index**, not a replacement for the actionable `SKILL.md` fil
 
 | Skill | Location | Activate when |
 |---|---|---|
-| change-documentation | `skills/change-documentation/SKILL.md` | **Always; every repository task**, plus commit and PR preparation |
+| project-knowledge | `skills/project-knowledge/SKILL.md` | **Always; every repository task** for persistent knowledge, docs, and commit/PR preparation |
 | clinic-queue | `skills/clinic-queue/SKILL.md` | Changes to admin/staff screens, config, ticket issuance/printing, queue engine, display, SignalR, auth or related tests |
 
 ## Skill precedence
