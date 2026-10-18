@@ -12,8 +12,13 @@ Queuing/
 │   ├── Queuing.Api/       # C# ASP.NET Core host and controllers
 │   └── Queuing.Core/      # VB.NET class library, currently a stub
 ├── frontend/
-│   ├── package.json       # React + JavaScript + Vite
-│   └── src/               # App.jsx, main.jsx, index.css
+│   ├── package.json       # React + JavaScript + Vite scripts
+│   ├── playwright.config.js
+│   ├── src/
+│   │   ├── App.jsx        # shared shell and frontend routes
+│   │   ├── data/          # synthetic demo snapshot
+│   │   └── features/      # admin, staff, ticket, public display views
+│   └── tests/             # Node unit tests and Playwright E2E
 ├── docs/                  # code map, specs, ADRs, decisions, templates, runbooks
 └── skills/
     ├── project-knowledge/   # default shared knowledge, docs and delivery guidance
@@ -21,7 +26,7 @@ Queuing/
     └── render/               # frontend design workflow and progressive references
 ```
 
-The API and core projects currently target .NET 10. The frontend is a small starter, and the queue requirements remain proposed. Do not infer modules, tests, migrations, or production services from the design documents.
+The API and core projects currently target .NET 10. The frontend now contains a frontend-only queue MVP preview; it does not implement the backend workflows described by the product proposal. Do not infer backend modules, migrations, or production services from the design documents.
 
 ## Growth path
 

@@ -59,7 +59,7 @@ Disallowed until new approved spec: health records, patient PHI, appointments, p
 
 ## Tests required per changed capability
 - Domain transition and numbering tests; integration DB tests against real PostgreSQL (prefer Testcontainers); concurrent call-next; retry/idempotency; authorization matrix; API contract tests; React component + accessibility tests; display SignalR reconnect; printing 58/80mm preview; end-to-end happy path; migration and restore smoke tests.
-- Run only checks configured in the current projects. Today the solution has no test project, and the frontend exposes `lint` and `build` scripts but no test or typecheck script. Add focused test infrastructure with the first meaningful behavior; do not report unavailable commands as passing.
+- Run only checks configured in the current projects. The backend still has no test project; the frontend exposes `test` (Node unit tests), `test:e2e` (Playwright), `lint`, and `build`, but no typecheck script. Do not report unavailable commands as passing.
 - Record exact commands/results and distinguish current checks from future acceptance requirements.
 
 ## Work format

@@ -18,6 +18,7 @@ Keep this small structure until real features require more boundaries. The targe
 - `docs/STRUCTURE.md` — current tree and phased growth plan.
 - `docs/CODEBASE_MAP.md` — live source responsibilities and current gaps.
 - `docs/specs/` — feature specs and acceptance criteria.
+- `docs/specs/002-frontend-mvp-demo/` — approved frontend-only preview scope and acceptance checks; sample controls do not issue backend commands.
 - `skills/project-knowledge/SKILL.md` — default persistent-knowledge, documentation, and commit/PR guidance for all agents.
 - `skills/clinic-queue/SKILL.md` — specialist implementation and review guidance.
 - `skills/render/SKILL.md` — frontend design and implementation guidance; sourced from [hiroqt/overdrive](https://github.com/hiroqt/overdrive) at commit `1686bca01365d76f8e25cfb7a0ee7ccb7920e76e` (MIT; license included).
@@ -30,7 +31,7 @@ From the repository root:
 dotnet build Queuing.slnx
 ```
 
-For the frontend, run `npm ci` once from `frontend/`, then use `npm run dev`, `npm run lint`, or `npm run build` there. The frontend currently has no test script.
+For the frontend, run `npm ci` once from `frontend/`, then use `npm run dev`, `npm run test`, `npm run test:e2e`, `npm run lint`, or `npm run build` there. Install Playwright Chromium in a fresh environment with `npx playwright install chromium` before E2E tests.
 
 ## Read order
 
