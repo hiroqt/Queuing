@@ -17,7 +17,8 @@ Queuing/
 ├── docs/                  # code map, specs, ADRs, decisions, templates, runbooks
 └── skills/
     ├── project-knowledge/   # default shared knowledge, docs and delivery guidance
-    └── clinic-queue/         # specialist guidance
+    ├── clinic-queue/         # queue-specific implementation and review guidance
+    └── render/               # frontend design workflow and progressive references
 ```
 
 The API and core projects currently target .NET 10. The frontend is a small starter, and the queue requirements remain proposed. Do not infer modules, tests, migrations, or production services from the design documents.

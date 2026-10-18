@@ -20,6 +20,7 @@ Keep this small structure until real features require more boundaries. The targe
 - `docs/specs/` — feature specs and acceptance criteria.
 - `skills/project-knowledge/SKILL.md` — default persistent-knowledge, documentation, and commit/PR guidance for all agents.
 - `skills/clinic-queue/SKILL.md` — specialist implementation and review guidance.
+- `skills/render/SKILL.md` — frontend design and implementation guidance; sourced from [hiroqt/overdrive](https://github.com/hiroqt/overdrive) at commit `1686bca01365d76f8e25cfb7a0ee7ccb7920e76e` (MIT; license included).
 
 ## Local commands
 
@@ -37,7 +38,8 @@ For the frontend, run `npm ci` once from `frontend/`, then use `npm run dev`, `n
 2. `PRD.md` and `ARD.md` — proposed requirements and architecture.
 3. `docs/OPEN_DECISIONS.md` and the relevant files under `docs/specs/`.
 4. `skills/clinic-queue/SKILL.md` for relevant queue/auth/display/printing work.
-5. `SDD.md` and `docs/adr/` for workflow and decisions.
+5. `skills/render/SKILL.md` for frontend/UI work, with only the relevant references loaded as needed.
+6. `SDD.md` and `docs/adr/` for workflow and decisions.
 
 ## Status
 

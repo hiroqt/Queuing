@@ -1,11 +1,12 @@
 # SKILLS.md — Skill Catalog and Activation
 
-This is the **skill index**, not a replacement for the actionable `SKILL.md` file. `AGENTS.md` requires agents to load `skills/clinic-queue/SKILL.md` for relevant work.
+This is the **skill index**, not a replacement for the actionable `SKILL.md` files. `AGENTS.md` routes agents to the relevant specialist skill.
 
 | Skill | Location | Activate when |
 |---|---|---|
 | project-knowledge | `skills/project-knowledge/SKILL.md` | **Always; every repository task** for persistent knowledge, docs, and commit/PR preparation |
 | clinic-queue | `skills/clinic-queue/SKILL.md` | Changes to admin/staff screens, config, ticket issuance/printing, queue engine, display, SignalR, auth or related tests |
+| render | `skills/render/SKILL.md` | Frontend/UI design, implementation, redesign, or review; follow its progressive references and existing-design direction gate. Upstream: [hiroqt/overdrive](https://github.com/hiroqt/overdrive), commit `1686bca01365d76f8e25cfb7a0ee7ccb7920e76e` (MIT; license included) |
 
 ## Skill precedence
 System/developer instructions → `AGENTS.md` → accepted PRD/ARD/ADRs → approved feature specs → skill procedure → local coding conventions. A skill may refine implementation but must never override scope or security.
