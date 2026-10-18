@@ -1,0 +1,12 @@
+[
+  {
+    "ContainingType": "Queuing.Api.Controllers.TestController",
+    "Method": "GetValues",
+    "RelativePath": "api/Test",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  }
+]

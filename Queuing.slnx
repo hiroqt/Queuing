@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="backend/Queuing.Api/Queuing.Api.csproj" />
+  <Project Path="backend/Queuing.Core/Queuing.Core.vbproj" />
+</Solution>

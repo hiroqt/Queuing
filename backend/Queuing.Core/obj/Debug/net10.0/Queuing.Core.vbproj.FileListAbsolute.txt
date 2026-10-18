@@ -1,0 +1,12 @@
+C:\Users\janro\PROJECTS\Queuing\backend\Queuing.Core\bin\Debug\net10.0\Queuing.Core.deps.json
+C:\Users\janro\PROJECTS\Queuing\backend\Queuing.Core\bin\Debug\net10.0\Queuing.Core.dll
+C:\Users\janro\PROJECTS\Queuing\backend\Queuing.Core\bin\Debug\net10.0\Queuing.Core.pdb
+C:\Users\janro\PROJECTS\Queuing\backend\Queuing.Core\obj\Debug\net10.0\Queuing.Core.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\janro\PROJECTS\Queuing\backend\Queuing.Core\obj\Debug\net10.0\Queuing.Core.AssemblyInfoInputs.cache
+C:\Users\janro\PROJECTS\Queuing\backend\Queuing.Core\obj\Debug\net10.0\Queuing.Core.AssemblyInfo.vb
+C:\Users\janro\PROJECTS\Queuing\backend\Queuing.Core\obj\Debug\net10.0\Queuing.Core.vbproj.CoreCompileInputs.cache
+C:\Users\janro\PROJECTS\Queuing\backend\Queuing.Core\obj\Debug\net10.0\Queuing.Core.dll
+C:\Users\janro\PROJECTS\Queuing\backend\Queuing.Core\obj\Debug\net10.0\refint\Queuing.Core.dll
+C:\Users\janro\PROJECTS\Queuing\backend\Queuing.Core\obj\Debug\net10.0\Queuing.Core.pdb
+C:\Users\janro\PROJECTS\Queuing\backend\Queuing.Core\obj\Debug\net10.0\ref\Queuing.Core.dll
+C:\Users\janro\PROJECTS\Queuing\backend\Queuing.Core\obj\Debug\net10.0\Queuing..485BF040.Up2Date
