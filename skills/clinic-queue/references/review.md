@@ -1,0 +1,12 @@
+# PR / release review checklist
+- [ ] Requirements and acceptance ID linked to diff
+- [ ] No MVP scope creep or prohibited module
+- [ ] Dependencies remain inward; no cross-module DbContext reach-through
+- [ ] OpenAPI and typed frontend client synchronized
+- [ ] Minimal API controller/handler and focused React feature components
+- [ ] Audit, auth and privacy checked for every new endpoint
+- [ ] EF migrations reviewed, reversible/recoverable plan recorded
+- [ ] Accessibility/loading/conflict states exercised
+- [ ] Printing and display reconnect tested if impacted
+- [ ] Tests truly executed; failures and gaps documented
+- [ ] Deployment and rollback notes provided
