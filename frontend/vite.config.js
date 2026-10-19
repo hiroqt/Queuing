@@ -8,6 +8,10 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": "http://127.0.0.1:5271",
+      "/hubs": {
+        target: "http://127.0.0.1:5271",
+        ws: true,
+      },
     },
   },
 })

@@ -9,16 +9,20 @@ This map describes the live checkout. Broader clinic-queue behavior remains prop
 | `Queuing.slnx` | Includes the ASP.NET Core API, VB.NET core library, and VB.NET core test project. |
 | `backend/Queuing.Api/Program.cs` | ASP.NET Core startup, controller registration, Problem Details, and demo queue singleton. |
 | `backend/Queuing.Api/Controllers/TestController.cs` | Placeholder `GET /api/test` endpoint. |
+| `backend/Queuing.Api/Hubs/QueueHub.cs` | SignalR Hub mapped to `/hubs/queue` broadcasting real-time `TicketCalled`, `TicketRecalled`, and snapshots. |
+| `backend/Queuing.Api/Controllers/QueueDisplayController.cs` | REST fallback `GET /api/queue/display` and broadcast command endpoints (`/call`, `/recall`). |
 | `backend/Queuing.Api/Controllers/QueueController.cs` | Demo API for services, ticket issue/read, and the anonymous queue display projection. |
-| `backend/Queuing.Core/QueueDemoStore.vb` | Thread-safe in-memory service catalog, ticket sequence/idempotency, and three-ticket display projection. |
-| `backend/Queuing.Core.Tests/` | Unit and same-process concurrency tests for the demo queue core. |
+| `backend/Queuing.Core/QueueDemoStore.vb` | Thread-safe in-memory service catalog, sequence/idempotency, and multi-counter active display projection. |
+| `backend/Queuing.Core.Tests/` | Unit and concurrency tests for demo queue core, ticketing, display snapshots, and calling. |
 | `frontend/src/main.jsx` | React root, stylesheet import, and browser router. |
-| `frontend/src/App.jsx` | Shared workspace shell, combined queue dashboard, and unchanged admin preview route. |
+| `frontend/src/App.jsx` | Router configuration registering standalone `/display` kiosk and the staff workspace shell. |
+| `frontend/src/pages/QueueDisplay.jsx` | Standalone full-screen 16:9 public display board ("Now Serving" hero, counter grid, marquee ticker). |
+| `frontend/src/services/queueHub.js` | SignalR connection service, Web Audio chime synthesis, Web Speech announcements, and polling fallback. |
 | `frontend/src/features/queue/api.js` | Same-origin client for service lookup, issue, and display snapshot endpoints. |
 | `frontend/src/features/queue/QueueDashboard.jsx` | Combined ticket issue, print-ready confirmation, and waiting/calling display. |
 | `frontend/src/data/demo-snapshot.js` | Synthetic admin preview data only. |
-| `frontend/src/index.css` | Responsive workspace, dashboard, display, and browser-print styles. |
-| `frontend/tests/` | Node API-client unit tests and Playwright tests that start the local API and Vite app. |
+| `frontend/src/index.css` | Responsive workspace, dashboard, display, marquee ticker, and browser-print styles. |
+| `frontend/tests/` | Node API-client unit tests, queue display unit tests, and Playwright E2E test suite. |
 | `docs/specs/003-presentation-queue/` | Approved local-demo behavior, architecture limits, and acceptance checks. |
 | `docs/audits/frontend-accessibility-audit-2026-10-18.md` | Historical audit for the prior frontend-only routes; two shared contrast values and the brand accessible name were corrected, but the new dashboard has not had a full WCAG audit. |
 | `frontend/package.json` | Frontend scripts: `dev`, `test`, `test:e2e`, `lint`, and `build`. |

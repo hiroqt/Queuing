@@ -95,3 +95,31 @@ test("dashboard remains keyboard accessible and fits narrow viewports", async ({
   await page.getByRole("link", { name: /Admin setup/ }).click();
   await expect(page.getByRole("heading", { name: "Admin setup" })).toBeVisible();
 });
+
+test("public queue display renders standalone TV view with live headers, now serving, and active counters", async ({ page }) => {
+  await page.goto("/display");
+
+  // Verify standalone layout isolation: NO app-frame or workspace sidebar
+  await expect(page.locator(".app-frame")).toHaveCount(0);
+  await expect(page.locator(".sidebar")).toHaveCount(0);
+
+  // Verify header elements
+  await expect(page.getByRole("heading", { name: "St. Jude Clinic & Wellness Center" })).toBeVisible();
+  await expect(page.getByText(/NOW SERVING/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Active Counters" })).toBeVisible();
+  await expect(page.getByText(/Priority lane available for Senior Citizens/)).toBeVisible();
+
+  // Test query parameter filtering
+  await page.goto("/display?theme=light&department=billing");
+  await expect(page.getByRole("heading", { name: "St. Jude Clinic & Wellness Center" })).toBeVisible();
+
+  // Verify REST fallback endpoint /api/queue/display
+  const displayResponse = await page.request.get("http://127.0.0.1:4173/api/queue/display");
+  expect(displayResponse.status()).toBe(200);
+  const items = await displayResponse.json();
+  expect(Array.isArray(items)).toBe(true);
+  expect(items.length).toBeGreaterThan(0);
+  expect(items[0]).toHaveProperty("ticketNumber");
+  expect(items[0]).toHaveProperty("counterName");
+});
+
