@@ -1,14 +1,10 @@
 import { Link, NavLink, Navigate, Outlet, Route, Routes } from "react-router";
 import AdminPage from "./features/admin/AdminPage.jsx";
-import DisplayPage from "./features/display/DisplayPage.jsx";
-import StaffPage from "./features/staff/StaffPage.jsx";
-import TicketsPage from "./features/tickets/TicketsPage.jsx";
+import QueueDashboard from "./features/queue/QueueDashboard.jsx";
 
 const destinations = [
-  { to: "/staff", label: "Staff desk", note: "Queue operations" },
-  { to: "/tickets", label: "Issue ticket", note: "Reception" },
+  { to: "/dashboard", label: "Queue dashboard", note: "Issue and display" },
   { to: "/admin", label: "Admin setup", note: "Services and counters" },
-  { to: "/display", label: "Public display", note: "Waiting room" },
 ];
 
 function AppLayout() {
@@ -16,7 +12,7 @@ function AppLayout() {
     <div className="app-frame">
       <a className="skip-link" href="#main-content">Skip to main content</a>
       <aside className="sidebar">
-        <Link className="brand" to="/staff" aria-label="Clinic queue home">
+        <Link className="brand" to="/dashboard">
           <span className="brand-mark" aria-hidden="true">q</span>
           <span><strong>Queue</strong><small>CLINIC WORKSPACE</small></span>
         </Link>
@@ -31,19 +27,19 @@ function AppLayout() {
         </nav>
         <div className="sidebar-foot">
           <span className="status-dot" aria-hidden="true" />
-          <span><strong>Preview mode</strong><small>No live queue connection</small></span>
+          <span><strong>Local API demo</strong><small>Volatile queue state</small></span>
         </div>
       </aside>
 
       <div className="workspace">
         <header className="topbar">
-          <div className="breadcrumb"><span>Sample clinic</span><span aria-hidden="true">/</span><strong>Queue operations</strong></div>
-          <span className="demo-badge">DEMO DATA</span>
+          <div className="breadcrumb"><span>Clinic queue</span><span aria-hidden="true">/</span><strong>Presentation</strong></div>
+          <span className="demo-badge">LOCAL DEMO</span>
         </header>
         <main id="main-content" className="page-content">
           <aside className="demo-notice" aria-label="Demo notice">
             <span className="notice-mark" aria-hidden="true">i</span>
-            <p><strong>Preview workspace.</strong> Sample data only; actions are not saved or sent to a server.</p>
+            <p><strong>Presentation demo.</strong> Tickets live in API memory and clear when it restarts. Do not enter patient information.</p>
           </aside>
           <Outlet />
         </main>
@@ -56,12 +52,13 @@ export default function App() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        <Route index element={<Navigate to="/staff" replace />} />
-        <Route path="staff" element={<StaffPage />} />
-        <Route path="tickets" element={<TicketsPage />} />
+        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route path="dashboard" element={<QueueDashboard />} />
         <Route path="admin" element={<AdminPage />} />
-        <Route path="display" element={<DisplayPage />} />
-        <Route path="*" element={<Navigate to="/staff" replace />} />
+        <Route path="staff" element={<Navigate to="/dashboard" replace />} />
+        <Route path="tickets" element={<Navigate to="/dashboard" replace />} />
+        <Route path="display" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
     </Routes>
   );

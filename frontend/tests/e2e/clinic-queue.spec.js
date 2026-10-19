@@ -1,81 +1,97 @@
 import { expect, test } from "@playwright/test";
 
-test("staff can navigate the four demo surfaces without sending backend commands", async ({ page }) => {
-  const backendRequests = [];
+test("dashboard issues tickets and shows the first three waiting before calling", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.print = () => { window.printRequested = true; };
+  });
+  const apiRequests = [];
   page.on("request", (request) => {
-    const url = new URL(request.url());
-    if (["fetch", "xhr"].includes(request.resourceType()) || /^\/(api|hubs)\//.test(url.pathname)) {
-      backendRequests.push(request.url());
-    }
+    if (new URL(request.url()).pathname.startsWith("/api/v1/")) apiRequests.push(request.url());
   });
 
   await page.goto("/");
-  await expect(page).toHaveURL(/\/staff$/);
-  await expect(page.getByRole("heading", { name: "Staff desk" })).toBeVisible();
-  await expect(page.getByLabel("Demo notice")).toContainText("actions are not saved or sent to a server");
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByRole("heading", { name: "Queue dashboard" })).toBeVisible();
+  await expect(page.getByText("No tickets are waiting.")).toBeVisible();
 
-  await page.getByRole("button", { name: "Call next" }).click();
-  await expect(page.getByRole("status")).toContainText("No queue command was sent");
+  const waitingRows = page.locator(".dashboard-board .board-waiting").first().locator("li");
+  const expectedServices = ["Consultation", "Laboratory", "Follow-up", "Consultation"];
+  const serviceIds = ["consultation", "laboratory", "follow-up", "consultation"];
 
-  for (const action of ["Complete", "Skip", "Review call"]) {
-    await page.getByRole("button", { name: action }).click();
-    await expect(page.getByRole("status")).toContainText("No queue command was sent");
+  for (let index = 0; index < expectedServices.length; index += 1) {
+    await page.getByLabel("Service").selectOption(serviceIds[index]);
+    await page.getByRole("button", { name: "Issue ticket" }).click();
+
+    const ticketNumber = String(index + 1).padStart(3, "0");
+    await expect(page.locator(".ticket-receipt .receipt-number")).toHaveText(ticketNumber);
+    await expect(page.locator(".ticket-receipt .receipt-service")).toHaveText(expectedServices[index]);
+    await expect(page.getByRole("button", { name: "Print ticket" })).toBeVisible();
   }
 
-  await page.getByRole("link", { name: /Admin setup/ }).click();
-  await expect(page.getByRole("heading", { name: "Admin setup" })).toBeVisible();
-  await page.getByRole("button", { name: "Preview save" }).click();
-  await expect(page.getByRole("status")).toContainText("No configuration was saved");
+  await page.getByRole("button", { name: "Print ticket" }).click();
+  await expect.poll(() => page.evaluate(() => window.printRequested)).toBe(true);
 
-  await page.getByRole("link", { name: /Issue ticket/ }).click();
-  await expect(page.getByRole("heading", { name: "Issue a ticket" })).toBeVisible();
-  await page.getByRole("button", { name: "Preview ticket" }).click();
-  await expect(page.getByRole("status")).toContainText("No ticket was issued");
-  await expect(page.getByText("Ticket number assigned after server confirmation")).toBeVisible();
+  await expect(waitingRows).toHaveCount(3);
+  await expect(waitingRows.nth(0)).toContainText("001");
+  await expect(waitingRows.nth(1)).toContainText("002");
+  await expect(waitingRows.nth(2)).toContainText("003");
+  await expect(page.locator(".dashboard-board")).toContainText("4 waiting");
+  await expect(page.locator(".dashboard-board .board-waiting").first()).not.toContainText("004");
+  await expect(page.getByRole("heading", { name: "Calling tickets" })).toBeVisible();
+  await expect(page.getByText("No tickets are being called.")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Call next/ })).toHaveCount(0);
+  expect(apiRequests.some((url) => url.includes("/api/v1/tickets"))).toBe(true);
+  expect(apiRequests.some((url) => url.includes("/api/v1/queue/display"))).toBe(true);
 
-  await page.getByRole("link", { name: /Public display/ }).click();
-  await expect(page.getByRole("heading", { name: "Waiting room display" })).toBeVisible();
-  await expect(page.getByText("Not connected to a live queue")).toBeVisible();
-  await expect(page.getByLabel("Sample public queue board")).toBeVisible();
-  expect(backendRequests).toEqual([]);
+  const displayResponse = await page.request.get("http://127.0.0.1:4173/api/v1/queue/display");
+  const displaySnapshot = await displayResponse.json();
+  expect(Object.keys(displaySnapshot.waiting[0])).toEqual(["number", "serviceName", "status"]);
+
+  const baseUrl = "http://127.0.0.1:4173/api/v1/tickets";
+  const retryKey = "00000000-0000-0000-0000-000000000001";
+  const unknownService = await page.request.post(baseUrl, {
+    data: { serviceId: "unknown" },
+    headers: { "Idempotency-Key": "00000000-0000-0000-0000-000000000002" },
+  });
+  expect(unknownService.status()).toBe(400);
+
+  const original = await page.request.post(baseUrl, {
+    data: { serviceId: "consultation" },
+    headers: { "Idempotency-Key": retryKey },
+  });
+  const repeated = await page.request.post(baseUrl, {
+    data: { serviceId: "consultation" },
+    headers: { "Idempotency-Key": retryKey },
+  });
+  const conflict = await page.request.post(baseUrl, {
+    data: { serviceId: "laboratory" },
+    headers: { "Idempotency-Key": retryKey },
+  });
+  expect(original.status()).toBe(201);
+  expect(repeated.status()).toBe(200);
+  expect((await repeated.json()).id).toBe((await original.json()).id);
+  expect(conflict.status()).toBe(409);
 });
 
-test("all destinations remain available without page overflow on desktop or mobile", async ({ page }) => {
-  for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
-    await page.setViewportSize(viewport);
-    await page.goto("/staff");
+test("dashboard remains keyboard accessible and fits narrow viewports", async ({ page }) => {
+  await page.goto("/dashboard");
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: "Skip to main content" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: "Queue CLINIC WORKSPACE" })).toBeFocused();
 
-    for (const [label, heading] of [
-      [/Staff desk/, "Staff desk"],
-      [/Issue ticket/, "Issue a ticket"],
-      [/Admin setup/, "Admin setup"],
-      [/Public display/, "Waiting room display"],
-    ]) {
-      const destination = page.getByRole("link", { name: label });
-      await expect(destination).toBeVisible();
-      await destination.click();
-      await expect(page.getByRole("heading", { name: heading })).toBeVisible();
-      const hasHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
-      expect(hasHorizontalOverflow, `${heading} should not overflow at ${viewport.width}px`).toBe(false);
-    }
+  for (const width of [320, 390, 768, 1120, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    const hasHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    expect(hasHorizontalOverflow, `dashboard should not overflow at ${width}px`).toBe(false);
   }
-});
 
-test("keyboard users can reach the skip link and primary navigation", async ({ page }) => {
-  await page.goto("/staff");
-  await page.keyboard.press("Tab");
-  const skipLink = page.getByRole("link", { name: "Skip to main content" });
-  await expect(skipLink).toBeFocused();
-  await expect(skipLink).toHaveCSS("outline-style", "solid");
-  await page.keyboard.press("Tab");
-  await expect(page.getByRole("link", { name: "Clinic queue home" })).toBeFocused();
-});
-
-test("reduced-motion preference removes nonessential transitions", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto("/staff");
-  const duration = await page.getByRole("button", { name: "Call next" }).evaluate((button) =>
+  const duration = await page.getByRole("button", { name: "Issue ticket" }).evaluate((button) =>
     Number.parseFloat(getComputedStyle(button).transitionDuration),
   );
   expect(duration).toBeLessThanOrEqual(0.001);
+
+  await page.getByRole("link", { name: /Admin setup/ }).click();
+  await expect(page.getByRole("heading", { name: "Admin setup" })).toBeVisible();
 });
