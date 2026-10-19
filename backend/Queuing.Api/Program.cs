@@ -1,3 +1,5 @@
+using Queuing.Core;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddCors(options =>
@@ -9,10 +11,14 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddControllers();
+builder.Services.AddProblemDetails();
+builder.Services.AddSingleton<QueueDemoStore>();
 
 var app = builder.Build();
 
 app.UseCors();
+app.UseExceptionHandler();
+app.UseStatusCodePages();
 
 //app.MapGet("/", () => "Hello World!");
 //app.MapGet("/test", () => "Hello World!");
