@@ -1,9 +1,11 @@
 import { Link, NavLink, Navigate, Outlet, Route, Routes } from "react-router";
 import AdminPage from "./features/admin/AdminPage.jsx";
 import QueueDashboard from "./features/queue/QueueDashboard.jsx";
+import QueueDisplay from "./pages/QueueDisplay.jsx";
 
 const destinations = [
   { to: "/dashboard", label: "Queue dashboard", note: "Issue and display" },
+  { to: "/display", label: "Public TV display", note: "Now serving board" },
   { to: "/admin", label: "Admin setup", note: "Services and counters" },
 ];
 
@@ -51,13 +53,17 @@ function AppLayout() {
 export default function App() {
   return (
     <Routes>
+      {/* Standalone Isolated Route for Public Queue Display Screen (No sidebar, no staff layout) */}
+      <Route path="display" element={<QueueDisplay />} />
+      <Route path="queue/display" element={<QueueDisplay />} />
+
+      {/* Staff & Admin Workspace shell */}
       <Route element={<AppLayout />}>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<QueueDashboard />} />
         <Route path="admin" element={<AdminPage />} />
         <Route path="staff" element={<Navigate to="/dashboard" replace />} />
         <Route path="tickets" element={<Navigate to="/dashboard" replace />} />
-        <Route path="display" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
     </Routes>

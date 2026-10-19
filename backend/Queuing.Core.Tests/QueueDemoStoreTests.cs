@@ -101,4 +101,52 @@ public sealed class QueueDemoStoreTests
         Assert.Equal("001", next.Ticket!.Number);
         Assert.Equal(1, restartedProcess.GetDisplaySnapshot().TotalWaiting);
     }
+
+    [Fact]
+    public void GetActiveDisplayQueue_returns_active_calls_with_queue_item_properties()
+    {
+        var store = new QueueDemoStore();
+        var items = store.GetActiveDisplayQueue();
+
+        Assert.NotEmpty(items);
+        var first = items[0];
+        Assert.NotEqual(Guid.Empty, first.TicketId);
+        Assert.False(string.IsNullOrWhiteSpace(first.TicketNumber));
+        Assert.False(string.IsNullOrWhiteSpace(first.Department));
+        Assert.False(string.IsNullOrWhiteSpace(first.CounterName));
+        Assert.False(string.IsNullOrWhiteSpace(first.Status));
+    }
+
+    [Fact]
+    public void CallNext_advances_waiting_ticket_to_called_status()
+    {
+        var store = new QueueDemoStore();
+        var issueResult = store.Issue(ServiceIds[0], Guid.NewGuid());
+        Assert.Equal("001", issueResult.Ticket!.Number);
+
+        var calledItem = store.CallNext("Consultation", "Counter 02");
+        Assert.Equal("001", calledItem.TicketNumber);
+        Assert.Equal("Consultation", calledItem.Department);
+        Assert.Equal("Counter 02", calledItem.CounterName);
+        Assert.Equal("Called", calledItem.Status);
+
+        var active = store.GetActiveDisplayQueue();
+        Assert.Equal(calledItem.TicketNumber, active[0].TicketNumber);
+    }
+
+    [Fact]
+    public void RecallTicket_prepends_recalled_entry()
+    {
+        var store = new QueueDemoStore();
+        var recalled = store.RecallTicket("A-101", "Counter 03");
+
+        Assert.Equal("A-101", recalled.TicketNumber);
+        Assert.Equal("Counter 03", recalled.CounterName);
+        Assert.Equal("Recalled", recalled.Status);
+
+        var active = store.GetActiveDisplayQueue();
+        Assert.Equal("A-101", active[0].TicketNumber);
+        Assert.Equal("Recalled", active[0].Status);
+    }
 }
+
