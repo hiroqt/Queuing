@@ -42,6 +42,8 @@ project.assets.json
 node_modules/
 dist/
 dist-ssr/
+frontend/test-results/
+frontend/playwright-report/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

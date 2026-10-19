@@ -8,7 +8,8 @@ Build and maintain a **basic clinic queue** toward the proposed React/TypeScript
 2. Start with `README.md` and `docs/CODEBASE_MAP.md`; read `docs/STRUCTURE.md` for layout/architecture work.
 3. For behavior changes, read the relevant PRD/ARD/SDD sections, open decisions, and the approved feature spec; do not load unrelated specs or references.
 4. For queue/auth/display/printing/configuration work, load `skills/clinic-queue/SKILL.md` and only the relevant referenced checklists.
-5. Examine actual code, manifests, tests, migrations and API contracts. Docs may describe desired, not current, state.
+5. For frontend/UI design, implementation, or review, load `skills/render/SKILL.md` and only its relevant references. Follow the design-choice gate there for a coherent existing UI; preserve the current React/JavaScript stack and clinic-queue security and scope boundaries.
+6. Examine actual code, manifests, tests, migrations and API contracts. Docs may describe desired, not current, state.
 
 ## Mandatory SDD protocol
 **Specify → challenge assumptions → plan → contract/test design → implement one vertical slice → verify → review → document.** For substantive scope, permissions, schema, printing or workflow changes, do not implement without an approved spec and plan. When no reviewer is available, document assumptions/blocks and perform only safe in-scope scaffolding. Never mark work tested if a tool was unavailable.
@@ -58,7 +59,7 @@ Disallowed until new approved spec: health records, patient PHI, appointments, p
 
 ## Tests required per changed capability
 - Domain transition and numbering tests; integration DB tests against real PostgreSQL (prefer Testcontainers); concurrent call-next; retry/idempotency; authorization matrix; API contract tests; React component + accessibility tests; display SignalR reconnect; printing 58/80mm preview; end-to-end happy path; migration and restore smoke tests.
-- Run only checks configured in the current projects. Today the solution has no test project, and the frontend exposes `lint` and `build` scripts but no test or typecheck script. Add focused test infrastructure with the first meaningful behavior; do not report unavailable commands as passing.
+- Run only checks configured in the current projects. The backend still has no test project; the frontend exposes `test` (Node unit tests), `test:e2e` (Playwright), `lint`, and `build`, but no typecheck script. Do not report unavailable commands as passing.
 - Record exact commands/results and distinguish current checks from future acceptance requirements.
 
 ## Work format
