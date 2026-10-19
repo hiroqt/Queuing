@@ -22,6 +22,7 @@ Build and maintain a **basic clinic queue** toward the proposed React/TypeScript
 - API controllers are thin: authenticate, validate contract, invoke use case, map responses.
 - Prefer feature folders/vertical slices *inside* a modular monolith. Do not add microservices, generic repositories, message brokers or Redis without measured need.
 - Use PostgreSQL transactions/constraints for ticket sequencing, atomic call-next and state changes; no in-memory counters as source of truth.
+- `docs/specs/003-presentation-queue/` explicitly permits process-local in-memory state for a localhost presentation demo only. This exception is not durable queue authority and must not be extended to clinic operations or production.
 - Persist first, publish realtime changes after commit via outbox/dispatcher. SignalR is a notification mechanism, not the record of truth. Clients refresh snapshot on reconnect.
 - Configuration of service/counter/screen/template is data-driven; executable modules and layouts come from a controlled code registry.
 
@@ -59,7 +60,7 @@ Disallowed until new approved spec: health records, patient PHI, appointments, p
 
 ## Tests required per changed capability
 - Domain transition and numbering tests; integration DB tests against real PostgreSQL (prefer Testcontainers); concurrent call-next; retry/idempotency; authorization matrix; API contract tests; React component + accessibility tests; display SignalR reconnect; printing 58/80mm preview; end-to-end happy path; migration and restore smoke tests.
-- Run only checks configured in the current projects. The backend still has no test project; the frontend exposes `test` (Node unit tests), `test:e2e` (Playwright), `lint`, and `build`, but no typecheck script. Do not report unavailable commands as passing.
+- Run only checks configured in the current projects. `dotnet test Queuing.slnx` covers the demo queue core; it is not PostgreSQL integration coverage. The frontend exposes `test` (Node API-client unit tests), `test:e2e` (Playwright starts the API and Vite locally), `lint`, and `build`, but no typecheck script. Do not report unavailable commands as passing.
 - Record exact commands/results and distinguish current checks from future acceptance requirements.
 
 ## Work format

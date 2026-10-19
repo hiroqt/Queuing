@@ -1,5 +1,7 @@
 # Frontend accessibility audit — 2026-10-18
 
+> Historical scope: this audit covered the frontend-only `/staff`, `/admin`, `/tickets`, and `/display` routes present on 2026-10-18. SPEC-003 replaced the staff, ticket, and display routes with a backend-connected presentation dashboard on 2026-10-19. The muted-text and active-navigation contrast colors were darkened and the brand link now derives its accessible name from its visible label, but this report is not a full WCAG audit of the new dashboard. Its current automated browser checks cover skip-link keyboard focus, reduced motion, and page overflow at 320, 390, 768, 1120, and 1440 CSS px. No axe scan, full success-criteria assessment, or assistive-technology review was run for the dashboard.
+
 ## Scope and method
 
 Reviewed the complete current frontend demo at `/staff`, `/admin`, `/tickets`, and `/display`, including the staff action messages, admin save preview, and ticket preview. No backend, persistence, or live queue exists in these screens.

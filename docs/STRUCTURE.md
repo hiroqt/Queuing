@@ -10,14 +10,15 @@ Queuing/
 ├── Queuing.slnx
 ├── backend/
 │   ├── Queuing.Api/       # C# ASP.NET Core host and controllers
-│   └── Queuing.Core/      # VB.NET class library, currently a stub
+│   ├── Queuing.Core/      # VB.NET demo queue state and display projection
+│   └── Queuing.Core.Tests/ # C# xUnit tests for the VB.NET core
 ├── frontend/
 │   ├── package.json       # React + JavaScript + Vite scripts
 │   ├── playwright.config.js
 │   ├── src/
 │   │   ├── App.jsx        # shared shell and frontend routes
-│   │   ├── data/          # synthetic demo snapshot
-│   │   └── features/      # admin, staff, ticket, public display views
+│   │   ├── data/          # synthetic admin preview snapshot
+│   │   └── features/      # combined queue dashboard and admin preview
 │   └── tests/             # Node unit tests and Playwright E2E
 ├── docs/                  # code map, specs, ADRs, decisions, templates, runbooks
 └── skills/
@@ -26,7 +27,7 @@ Queuing/
     └── render/               # frontend design workflow and progressive references
 ```
 
-The API and core projects currently target .NET 10. The frontend now contains a frontend-only queue MVP preview; it does not implement the backend workflows described by the product proposal. Do not infer backend modules, migrations, or production services from the design documents.
+The projects target .NET 10. SPEC-003 adds a local backend-connected presentation slice for ticket issue and display. Queue state is volatile, has no sign-in, and is not production infrastructure. Admin setup remains a static preview; do not infer database modules, migrations, or production services from the broader design documents.
 
 ## Growth path
 

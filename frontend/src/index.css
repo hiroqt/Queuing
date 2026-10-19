@@ -8,7 +8,7 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   --ink: #203231;
-  --muted: #687775;
+  --muted: #5f6e6a;
   --line: #dfe5df;
   --paper: #fff;
   --canvas: #f4f5f1;
@@ -100,7 +100,7 @@ a { color: inherit; }
 .nav-link[aria-current="page"] { background: #f4f5f1; color: var(--evergreen); }
 .nav-link-copy > span { display: block; font-size: 13px; font-weight: 650; }
 .nav-link-copy small { display: block; margin-top: 4px; color: #bad0c7; font-size: 11px; }
-.nav-link[aria-current="page"] .nav-link-copy small { color: #627570; }
+.nav-link[aria-current="page"] .nav-link-copy small { color: #5f6e6a; }
 .nav-indicator { width: 6px; height: 6px; border-radius: 50%; background: transparent; }
 .nav-link[aria-current="page"] .nav-indicator { background: #bd731a; }
 .sidebar-foot { display: flex; gap: 10px; align-items: center; margin-top: auto; padding: 15px 12px 2px; border-top: 1px solid #42645e; }
@@ -228,6 +228,54 @@ form .button { justify-self: start; margin-top: 4px; }
 .board-waiting li span { color: #dde5de; font-size: 12px; }
 .board-waiting li span:last-child { color: #c5d3ca; font-size: 10px; text-align: right; }
 .board-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 20px; padding: 15px 30px; border-top: 1px solid #38534b; color: #bbcac1; font-size: 9px; }
+
+.dashboard-layout { display: grid; grid-template-columns: minmax(250px, .8fr) minmax(340px, 1.2fr); gap: 22px; align-items: start; }
+.dashboard-issue { min-width: 0; }
+.dashboard-issue h2 { margin: 7px 0 0; font-size: 21px; }
+.dashboard-issue form { margin-top: 23px; }
+.dashboard-board { min-width: 0; }
+.dashboard-board .board-header { padding: 20px 24px 17px; }
+.dashboard-board .board-header h2 { font-size: 25px; }
+.dashboard-board .board-waiting { padding: 18px 24px 6px; }
+.dashboard-board .board-waiting h3 { margin: 5px 0 0; color: #f2f4ef; font-size: 16px; font-weight: 600; }
+.dashboard-board .board-waiting li { grid-template-columns: 70px minmax(0, 1fr) 70px; gap: 10px; }
+.dashboard-board .board-waiting li strong { font-size: 22px; }
+.dashboard-board .board-waiting li span { overflow-wrap: anywhere; }
+.dashboard-board .board-waiting li span:last-child { text-align: right; }
+.dashboard-board .board-empty { display: block; padding: 17px 0; color: #d5dfd7; font-size: 11px; }
+.dashboard-board .board-note { margin: 5px 0 8px; color: #cfdbd2; font-size: 10px; }
+.dashboard-board .board-calling { padding-top: 20px; }
+.dashboard-board .board-footer { padding-right: 24px; padding-left: 24px; }
+.dashboard-receipt { margin-top: 23px; padding: 17px; border: 1px solid var(--line); border-radius: 6px; background: #fffdf7; text-align: center; }
+.receipt-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; }
+.receipt-heading h2 { margin-top: 4px; font-size: 16px; }
+.receipt-heading .button { min-height: 38px; }
+.receipt-clinic { margin: 18px 0 5px; color: #596960; font-size: 9px; font-weight: 750; letter-spacing: .12em; }
+.receipt-number { margin: 0; color: var(--evergreen); font-family: Georgia, "Times New Roman", serif; font-size: 56px; font-variant-numeric: tabular-nums; letter-spacing: -.04em; line-height: 1.1; }
+.receipt-service { margin: 5px 0; font-family: Georgia, "Times New Roman", serif; font-size: 20px; }
+.receipt-time, .receipt-note { color: #586963; font-size: 11px; }
+.receipt-note { margin: 16px 0 0; padding-top: 13px; border-top: 1px dashed #c8c9bd; }
+
+@media (max-width: 1120px) {
+  .dashboard-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 760px) {
+  .dashboard-board .board-header { padding-right: 20px; padding-left: 20px; }
+  .dashboard-board .board-waiting { padding-right: 20px; padding-left: 20px; }
+  .dashboard-board .board-footer { padding-right: 20px; padding-left: 20px; }
+}
+
+@media print {
+  @page { size: 58mm auto; margin: 4mm; }
+  body * { visibility: hidden !important; }
+  .ticket-receipt, .ticket-receipt * { visibility: visible !important; }
+  .ticket-receipt { position: absolute; top: 0; left: 0; width: 50mm; margin: 0; padding: 2mm; border: 0; background: #fff; }
+  .ticket-receipt .no-print { display: none !important; }
+  .receipt-heading { justify-content: center; text-align: center; }
+  .receipt-heading .eyebrow, .receipt-heading h2 { display: none; }
+  .receipt-number { font-size: 36pt; }
+}
 
 @media (max-width: 1120px) {
   .sidebar { width: 218px; }
