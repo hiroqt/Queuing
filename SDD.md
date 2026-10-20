@@ -21,7 +21,7 @@ Write domain/authorization/concurrency/idempotency/unit/integration/e2e acceptan
 Implement one observable outcome end-to-end, e.g. create service configuration → API → admin form → tests. Backend domain owns policy; UI sends intention and renders states. Use reviewed migration and clear API errors. Check modules for dependency cycles.
 
 ## Stage 5 — Verify and security review
-Required gates: backend build and test, PostgreSQL integration/concurrency tests, frontend typecheck/lint/tests, role/ownership matrix, API schema diff, real-time resync, print preview/printer profile test if touched, SAST/dependency checks where available. Note tests not executed. Fix before signoff.
+Required gates: backend build and test, MySQL 8.x integration/concurrency tests for SPEC-005, frontend lint/tests/build, role/ownership matrix, API contract check, real-time resync, print preview/printer profile test if touched, SAST/dependency checks where available. Note tests not executed. Fix before signoff.
 
 ## Stage 6 — Release / feedback
 Review code; take backup; stage migration and run smoke tests; deploy with monitoring/rollback; record implementation links and results; update user docs, ADRs, runbooks and spec status. Keep acceptance history; never retrospectively declare unverified behavior working.

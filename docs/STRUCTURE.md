@@ -9,19 +9,23 @@ Queuing/
 ├── AGENTS.md, README.md, PRD.md, ARD.md, SDD.md, SKILLS.md
 ├── Queuing.slnx
 ├── backend/
-│   ├── Queuing.Api/       # C# ASP.NET Core host and controllers
-│   ├── Queuing.Core/      # VB.NET demo queue state and display projection
-│   └── Queuing.Core.Tests/ # C# xUnit tests for the VB.NET core
+│   ├── Queuing.Api/       # C# ASP.NET Core API, Identity, EF Core/MySQL persistence
+│   │   ├── Auth/          # Bootstrap, claims and department scope
+│   │   ├── Controllers/   # Auth, admin configuration, visits, queues, displays
+│   │   ├── Data/          # DbContext, design-time factory, health check, migrations
+│   │   ├── Hubs/          # Read-only scoped SignalR notifications
+│   │   └── Services/      # Persisted outbox dispatcher
+│   ├── Queuing.Core/      # VB.NET queue transition and eligibility rules; legacy demo store
+│   └── Queuing.Core.Tests/ # C# xUnit tests for the VB.NET core rules
 ├── frontend/
 │   ├── package.json       # React + JavaScript + Vite scripts
 │   ├── playwright.config.js
 │   ├── src/
 │   │   ├── App.jsx        # shared shell and frontend routes
-│   │   ├── data/          # synthetic admin preview snapshot
-│   │   ├── features/      # combined issue/call dashboard and admin preview
-│   │   ├── pages/         # standalone public TV display
-│   │   └── services/      # SignalR read-only display client
-│   └── tests/             # Node unit tests and Playwright E2E
+│   │   ├── api/           # Central versioned HTTP API client
+│   │   ├── auth/          # Login, session, password-change and route guards
+│   │   └── features/      # Admin, Reception, Department Staff, Display pairing/view
+│   └── tests/             # Node API/role unit tests and Playwright E2E
 ├── docs/                  # code map, specs, ADRs, decisions, templates, runbooks
 └── skills/
     ├── project-knowledge/   # default shared knowledge, docs and delivery guidance
@@ -29,15 +33,17 @@ Queuing/
     └── render/               # frontend design workflow and progressive references
 ```
 
-The projects target .NET 10. SPEC-003/SPEC-004 define a local backend-connected presentation slice for ticket issue, service-scoped call-next, and display. Queue state is volatile, has no sign-in, and is not production infrastructure. Admin setup remains a static preview; do not infer database modules, migrations, or production services from the broader design documents.
+The projects target .NET 10. The earlier SPEC-003/SPEC-004 in-memory presentation slices are retained as historical specifications/core tests; their old API routes were removed when SPEC-005 took over the application API.
+
+SPEC-005 is implemented in the existing API and React app: persistent MySQL-backed visits and dynamic departments/users/displays. The initial schema and timestamp-precision migrations, one-time admin bootstrap, and covered MySQL 8.4 API/browser workflow have passed locally. Date rollover, concurrent issue/forward races, recovery, and production readiness remain unverified. `docs/adr/0002-mysql-and-forwarding-visits.md` supersedes ADR-0001's proposed PostgreSQL choice for this slice.
 
 ## Growth path
 
 Keep the root `frontend/`, `backend/`, and solution layout. Add structure only alongside the first approved implementation of each capability:
 
-1. **Frontend:** when multiple screens/features exist, group code by feature (`features/<capability>/`) and keep genuinely shared UI/API utilities in `shared/`. Add app-level routing/providers only when needed. Keep JavaScript now; a move to TypeScript is a separately approved migration.
-2. **Backend:** keep HTTP endpoints thin. Put each first use case near its owning feature within the existing projects. Keep domain rules independent from ASP.NET Core and persistence. Add an Infrastructure project only when persistence or other infrastructure is introduced and needs a real dependency boundary. Preserve the current VB.NET core unless an approved migration changes it.
-3. **Tests:** create one focused test project when meaningful behavior is added. Split unit, integration, concurrency, or architecture suites only when their dependencies or execution needs justify separate projects. Exercise PostgreSQL-specific invariants against PostgreSQL.
+1. **Frontend:** keep each capability in `features/<capability>/`, shared versioned HTTP calls in `src/api/`, and auth state/route guards in `src/auth/`. Keep JavaScript; TypeScript is a separately approved migration.
+2. **Backend:** keep HTTP endpoints and persistence in the current API project until a concrete dependency boundary justifies another project. Keep workflow rules independent from ASP.NET Core and EF. Preserve the VB.NET core unless an approved migration changes it.
+3. **Tests:** keep core rules in the existing test project; add a separate integration project only when its database/container lifecycle requires it. Exercise database-specific invariants against MySQL 8.x for SPEC-005.
 4. **Deployment:** add deployment files only after a deployment target and operational requirements are approved.
 
 ## Proposed capability map

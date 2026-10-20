@@ -9,12 +9,12 @@ description: Implement and evolve the clinic queue system within its approved sc
 Read `AGENTS.md`, `PRD.md`, `ARD.md`, `SDD.md`, affected `docs/specs/*` and open decisions. This skill does not grant permission to exceed accepted scope. Only act on approved specs.
 
 ## Scope filter
-Allowed: admin/staff roles and screens; services/counters/assignments; tickets/printing; screen registration, approved templates, queue display; support layers for security/audit/ops. Refuse automatic expansion into billing, EHR, appointments, kiosk, SMS, multi-tenant branches or executable configuration. Ask for a new versioned spec/ADR instead.
+Allowed: admin/staff roles and screens; services/counters/assignments; tickets/printing; screen registration, approved templates, queue display; support layers for security/audit/ops. SPEC-005 also approves optional manually entered appointment times per visit step. Continue to refuse scheduling engines/imports, billing, EHR, kiosk, SMS, multi-tenant branches or executable configuration without a new versioned spec/ADR.
 
 ## Scalable evolution
 - Keep one deployable ASP.NET Core application and one database as the default. Treat module boundaries as code/data ownership boundaries; do not add services, brokers, caches or deployment units without a measured need and an approved decision.
 - Organize implementation by capability and vertical slice. Keep boundaries logical within existing projects at first; split projects/assemblies only when compile-time dependency enforcement, independent ownership, or test/build isolation provides a concrete benefit. Do not create empty Domain/Application/Infrastructure projects or generic repositories for the diagram.
-- Keep queue correctness in PostgreSQL: constraints and short transactions protect shared invariants across API instances. Process memory is never authoritative for ticket numbers or queue state.
+- Keep queue correctness in the database selected by the approved feature ADR: SPEC-005 uses MySQL 8.x/InnoDB constraints and short transactions to protect shared invariants. Process memory is never authoritative for ticket numbers or queue state.
 - `docs/specs/003-presentation-queue/` and `docs/specs/004-demo-call-flow/` are explicit exceptions for localhost presentation only: they permit volatile, single-process ticket state and service-scoped Call next. Keep one store as the source for issue/waiting/called snapshots; do not fabricate calls or use the public SignalR Hub for commands. Never reuse this implementation for clinic operations, multiple API instances, or production; restore database-backed sequencing first.
 - Persist outbox records with the business transaction, then dispatch after commit. Design dispatch and consumers to tolerate retries; SignalR remains an invalidation hint and clients reload authoritative snapshots.
 - Evolve API, database and configuration contracts compatibly where practical. Update OpenAPI clients and migrations together; record breaking or architectural changes in a spec/ADR with rollout and recovery implications.
@@ -35,14 +35,14 @@ Allowed: admin/staff roles and screens; services/counters/assignments; tickets/p
 7. **Verify** executable tests and record exact commands/outcomes; include rollout and rollback impacts.
 
 ## Hard requirements
-- All queue number allocation and call-next are atomic in PostgreSQL transactions; same-key retries are idempotent.
+- All queue number allocation and call-next are atomic in database transactions; same-key retries are idempotent. For SPEC-005, verify behavior against MySQL 8.x.
 - API authorization is role+resource-based; no trust in hidden UI controls.
 - React never assigns canonical numbers or statuses; EF domain constraints and state machine control them.
 - SignalR notifies after commit and never substitutes for snapshot read; displays resync on reconnection.
 - Config records dynamic; code-registered templates only. Admin cannot inject scripts/SQL/components.
 - Ticket printing reads persisted ticket and versioned preset; canceling print does not cancel issued ticket.
 - Public endpoints contain ticket/counter/service only, no patient identifying data.
-- Test in PostgreSQL for races, test actual printer for layout, test websocket disconnect.
+- Test the approved relational engine for races (MySQL 8.x for SPEC-005), test actual printer for layout, and test websocket disconnect.
 
 ## Specialized checklists
 Read `references/security.md` for all auth/UI/display work; `references/concurrency.md` for ticket/queue operations; `references/review.md` on every PR.

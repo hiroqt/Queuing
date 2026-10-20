@@ -1,40 +1,52 @@
 # Codebase Map
 
-This map describes the live checkout. Broader clinic-queue behavior remains proposed; see [`PRD.md`](../PRD.md), [`ARD.md`](../ARD.md), and [`docs/STRUCTURE.md`](STRUCTURE.md).
+This map describes the current SPEC-005 implementation. The accepted scope and detailed contracts live in [`SPEC-005`](specs/005-forwarding-clinic-queue/spec.md); operational readiness remains limited to local synthetic-data use.
 
-## Current source areas
+## Backend
 
-| Path | Responsibility today |
+| Path | Responsibility |
 |---|---|
-| `Queuing.slnx` | Includes the ASP.NET Core API, VB.NET core library, and VB.NET core test project. |
-| `backend/Queuing.Api/Program.cs` | ASP.NET Core startup, controller registration, Problem Details, and demo queue singleton. |
-| `backend/Queuing.Api/Controllers/TestController.cs` | Placeholder `GET /api/test` endpoint. |
-| `backend/Queuing.Api/Hubs/QueueHub.cs` | Read-only SignalR display snapshot endpoint; the API sends `TicketCalled` invalidation events after calls. |
-| `backend/Queuing.Api/Controllers/QueueDisplayController.cs` | Anonymous REST snapshot `GET /api/queue/display` for the local public display. |
-| `backend/Queuing.Api/Controllers/QueueController.cs` | Demo API for services, ticket issue/read, dashboard snapshot, and idempotent `POST /api/v1/queue/call-next`. |
-| `backend/Queuing.Core/QueueDemoStore.vb` | Single in-memory source for issued, waiting, and called tickets; service-scoped FIFO call and per-process request idempotency. |
-| `backend/Queuing.Core.Tests/` | Unit and concurrency tests for demo ticket issue/call behavior and consistent display snapshots. |
-| `frontend/src/main.jsx` | React root, stylesheet import, and browser router. |
-| `frontend/src/App.jsx` | Router configuration registering standalone `/display` kiosk and the staff workspace shell. |
-| `frontend/src/pages/QueueDisplay.jsx` | Standalone public TV display for current/recent calls, with empty state and fullscreen control. |
-| `frontend/src/services/queueHub.js` | Read-only SignalR client with snapshot recovery and disconnected polling fallback. |
-| `frontend/src/features/queue/api.js` | Same-origin client for service lookup, issue, call-next, and dashboard snapshot endpoints. |
-| `frontend/src/features/queue/QueueDashboard.jsx` | Staff demo flow for ticket issue, print-ready confirmation, service-scoped Call next, and waiting/calling snapshot. |
-| `frontend/src/data/demo-snapshot.js` | Synthetic admin preview data only. |
-| `frontend/src/index.css` | Responsive workspace, dashboard, display, marquee ticker, and browser-print styles. |
-| `frontend/tests/` | Node API-client unit tests, queue display unit tests, and Playwright E2E test suite. |
-| `docs/specs/003-presentation-queue/` | Original issue/display-only local-demo scope (historical after SPEC-004). |
-| `docs/specs/004-demo-call-flow/` | Current approved local call-next flow, boundaries, and acceptance checks. |
-| `docs/audits/frontend-accessibility-audit-2026-10-18.md` | Historical audit for the prior frontend-only routes; two shared contrast values and the brand accessible name were corrected, but the new dashboard has not had a full WCAG audit. |
-| `frontend/package.json` | Frontend scripts: `dev`, `test`, `test:e2e`, `lint`, and `build`. |
+| `backend/Queuing.Api/Program.cs` | ASP.NET Core composition root, MySQL/EF configuration, Identity cookies, antiforgery, rate limits, policies, health routes, SignalR, and outbox startup. |
+| `backend/Queuing.Api/Auth/` | One-time admin bootstrap, role constants, department authorization, display-device authentication, and password-change claims. |
+| `backend/Queuing.Api/Controllers/AuthController.cs` | Session, login/logout, CSRF token, and forced password change. |
+| `backend/Queuing.Api/Controllers/AdminUsersController.cs` | Admin-provisioned accounts, roles, department assignments, temporary credential, and audit. |
+| `backend/Queuing.Api/Controllers/DepartmentsController.cs` | Dynamic active department choices and admin create/update/deactivation. |
+| `backend/Queuing.Api/Controllers/DisplaysController.cs` | Admin monitor configuration and pairing code; anonymous activation; device-scoped snapshot and revocation. |
+| `backend/Queuing.Api/Controllers/VisitCommandsController.cs` | Reception visit issuance and lookup; staff queue, call-next, no-show requeue, complete/forward, idempotency, audit, and outbox writes. |
+| `backend/Queuing.Api/Data/QueueDbContext.cs` | Identity and clinic queue relational model and indexes. |
+| `backend/Queuing.Api/Data/Migrations/` | MySQL initial schema plus the queue-entry timestamp precision migration and model snapshot. |
+| `backend/Queuing.Api/Data/QueueDbContextFactory.cs` | EF design-time connection configuration for migrations. |
+| `backend/Queuing.Api/Services/QueueOutboxDispatcher.cs` | Dispatches committed queue-change invalidations to department-scoped SignalR groups. |
+| `backend/Queuing.Api/Hubs/QueueHub.cs` | Device-authenticated, department-scoped read-only notification hub. |
+| `backend/Queuing.Core/DepartmentQueuePolicy.vb` | Framework-independent step transition and appointment eligibility rules. |
+| `backend/Queuing.Core/QueueDemoStore.vb` | Historical in-memory demo implementation; not registered as the current API queue authority. |
+| `backend/Queuing.Core.Tests/` | xUnit checks for legacy demo behavior and current VB.NET queue policy rules. |
+
+## Frontend
+
+| Path | Responsibility |
+|---|---|
+| `frontend/src/App.jsx` | Public display pairing/view routes and authenticated workspace route tree. |
+| `frontend/src/api/client.js` | Central same-origin `/api/v1` fetch client, antiforgery token, session, admin, visit, queue and display API methods. |
+| `frontend/src/auth/` | Login, session provider, role guards, and forced password change. |
+| `frontend/src/features/admin/AdminPage.jsx` | Department, user, and monitor configuration. |
+| `frontend/src/features/reception/ReceptionPage.jsx` | Visit issue, anonymous receipt, browser print, and lookup. |
+| `frontend/src/features/department/DepartmentQueuePage.jsx` | Assigned queue, call-next, no-show requeue, completion, and forwarding. |
+| `frontend/src/features/display/` | One-time pairing route and anonymous read-only department display. |
+| `frontend/tests/unit/` | API client, idempotency header, appointment payload, and role unit tests. |
+| `frontend/tests/e2e/clinic-authenticated-workflows.spec.js` | Playwright UI workflows with mocked HTTP API responses. |
+| `frontend/tests/e2e/clinic-mysql-integration.spec.js` | Opt-in MySQL/API/browser workflow; uses a disposable `_test` database and a bootstrapped test admin. |
+
+All HTTP API calls use the shared client. The display SignalR connection is a separate realtime transport and carries only `QueueChanged` invalidations; the screen reloads its scoped REST snapshot.
 
 ## Current boundaries and gaps
 
-- The API and core library target .NET 10; the API is C# and the core library is VB.NET.
-- The presentation dashboard connects to the API for issue and service-scoped call-next; `/display` receives called-ticket snapshots and SignalR events. The single-process store resets on API restart. There is no database, authentication, display pairing, audit, outbox, or production deployment configuration.
-- The demo starts empty. A call request can only move a real waiting ticket for the selected service; it cannot fabricate a ticket or fall back to another service. The SignalR Hub is read-only; commands use REST and call requests are idempotent for the life of the API process.
-- Admin setup remains a static preview and does not configure the API catalog. Service choices for the demo are in the VB.NET core.
-- `dotnet test Queuing.slnx` runs the core test project; frontend scripts include Node unit tests, Playwright E2E, lint, and build, but no typecheck script.
-- `skills/` contains agent guidance, not application code: `project-knowledge/` applies repository-wide; `clinic-queue/` guides queue-specific work; `render/` guides frontend/UI work and includes its upstream license and references.
+- Current stack is C# ASP.NET Core 10 API, VB.NET core, and React JavaScript/Vite. No incidental language or framework migration is approved.
+- MySQL 8.x/InnoDB is the selected database for SPEC-005, recorded in [ADR-0002](adr/0002-mysql-and-forwarding-visits.md). Earlier PostgreSQL references are architectural proposals or historical specs.
+- The stable clinic-wide daily visit code uses `Asia/Manila` and remains unchanged while department steps advance. It may repeat on a later clinic date; lookups use visit ID.
+- `/display/pair` and `/display` bypass the staff sign-in route. Pairing is one-time and rate limited; the API stores a hash of the revocable device credential and scopes the cookie to one active department.
+- The current display projection contains department name and anonymous visit code/status only. It does not include patient identity, appointment time, or staff information.
+- `skills/` contains agent guidance, not application code. `skills/project-knowledge/` applies repository-wide; `skills/clinic-queue/` covers queue/security/persistence; `skills/render/` covers frontend work.
+- A MySQL 8.4 migration/bootstrap and covered API/browser queue flow have passed locally; date rollover, concurrent issue/forward races, backup/restore, multi-instance operation, production deployment, and live patient data remain unverified or out of scope.
 
-For the actual folders and phased growth guidance, see [`STRUCTURE.md`](STRUCTURE.md). Do not treat proposed capabilities as live code until they appear in the source and have verification evidence.
+For directory layout and growth rules, see [`STRUCTURE.md`](STRUCTURE.md). For the implementation brief and remaining acceptance evidence, see [`SPEC-005`](specs/005-forwarding-clinic-queue/spec.md) and its [acceptance record](specs/005-forwarding-clinic-queue/acceptance.md).
