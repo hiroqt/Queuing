@@ -21,17 +21,4 @@ public sealed class QueueHub(QueueDemoStore queueStore) : Hub
         return Task.FromResult(snapshot);
     }
 
-    public async Task CallTicket(CallTicketRequest request)
-    {
-        var item = queueStore.CallNext(request.Department ?? "Consultation", request.CounterName ?? "Counter 01");
-        var dto = QueueItemDto.FromCore(item);
-        await Clients.All.SendAsync("TicketCalled", dto);
-    }
-
-    public async Task RecallTicket(RecallTicketRequest request)
-    {
-        var item = queueStore.RecallTicket(request.TicketNumber, request.CounterName ?? "Counter 01");
-        var dto = QueueItemDto.FromCore(item);
-        await Clients.All.SendAsync("TicketRecalled", dto);
-    }
 }

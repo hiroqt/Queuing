@@ -9,7 +9,7 @@ Public NotInheritable Class QueueDemoStore
     }
     Private ReadOnly _tickets As New List(Of QueueEntry)()
     Private ReadOnly _idempotencyKeys As New Dictionary(Of Guid, QueueEntry)()
-    Private ReadOnly _activeCalls As New List(Of QueueItem)()
+    Private ReadOnly _callRequests As New Dictionary(Of Guid, CallRequestEntry)()
     Private _nextSequence As Long
 
     Public Function GetServices() As IReadOnlyList(Of DemoService)
@@ -51,128 +51,69 @@ Public NotInheritable Class QueueDemoStore
     Public Function GetDisplaySnapshot() As QueueDisplaySnapshot
         SyncLock _gate
             Dim waiting = _tickets.Where(Function(entry) entry.Ticket.Status = "Waiting").OrderBy(Function(entry) entry.Sequence).ToArray()
+            Dim calling = _tickets.Where(Function(entry) entry.Ticket.Status = "Called").
+                OrderByDescending(Function(entry) entry.Ticket.CalledAtUtc).
+                Take(3).
+                Select(Function(entry) New DisplayTicket(entry.Ticket.Number, entry.Ticket.ServiceName, entry.Ticket.Status)).
+                ToArray()
             Return New QueueDisplaySnapshot(
                 waiting.Take(3).Select(Function(entry) New DisplayTicket(entry.Ticket.Number, entry.Ticket.ServiceName, entry.Ticket.Status)).ToArray(),
                 waiting.Length,
-                Array.Empty(Of DisplayTicket)())
+                calling)
         End SyncLock
     End Function
 
     Public Function GetActiveDisplayQueue() As IReadOnlyList(Of QueueItem)
         SyncLock _gate
-            EnsureDemoDisplayItems()
-            Return _activeCalls.OrderByDescending(Function(item) item.Timestamp).ToList().AsReadOnly()
+            Return _tickets.Where(Function(entry) entry.Ticket.Status = "Called").
+                OrderByDescending(Function(entry) entry.Ticket.CalledAtUtc).
+                Select(Function(entry) New QueueItem(entry.Ticket.Id,
+                    entry.Ticket.Number,
+                    entry.Ticket.ServiceName,
+                    entry.Ticket.CalledCounterName,
+                    entry.Ticket.Status,
+                    entry.Ticket.CalledAtUtc.Value)).
+                ToList().AsReadOnly()
         End SyncLock
     End Function
 
-    Public Function CallNext(departmentOrServiceId As String, counterName As String) As QueueItem
+    Public Function CallNext(serviceId As String, counterName As String, idempotencyKey As Guid) As CallResult
         SyncLock _gate
-            EnsureDemoDisplayItems()
+            Dim existingRequest As CallRequestEntry = Nothing
+            If _callRequests.TryGetValue(idempotencyKey, existingRequest) Then
+                If String.Equals(existingRequest.ServiceId, serviceId, StringComparison.Ordinal) AndAlso
+                   String.Equals(existingRequest.CounterName, counterName, StringComparison.Ordinal) Then
+                    Return New CallResult(CallStatus.Replayed, existingRequest.Item)
+                End If
+                Return New CallResult(CallStatus.IdempotencyConflict, Nothing)
+            End If
 
-            Dim normalizedDept = If(String.IsNullOrWhiteSpace(departmentOrServiceId), "Consultation", departmentOrServiceId.Trim())
-            Dim resolvedCounter = If(String.IsNullOrWhiteSpace(counterName), "Counter 01", counterName.Trim())
+            Dim selectedService = _services.FirstOrDefault(Function(service) String.Equals(service.Id, serviceId, StringComparison.Ordinal))
+            If selectedService Is Nothing Then
+                Return New CallResult(CallStatus.InvalidService, Nothing)
+            End If
 
             Dim waitingEntry = _tickets.FirstOrDefault(Function(entry) entry.Ticket.Status = "Waiting" AndAlso
-                (String.Equals(entry.Ticket.ServiceId, normalizedDept, StringComparison.OrdinalIgnoreCase) OrElse
-                 String.Equals(entry.Ticket.ServiceName, normalizedDept, StringComparison.OrdinalIgnoreCase)))
-
+                String.Equals(entry.Ticket.ServiceId, selectedService.Id, StringComparison.Ordinal))
             If waitingEntry Is Nothing Then
-                waitingEntry = _tickets.FirstOrDefault(Function(entry) entry.Ticket.Status = "Waiting")
+                Return New CallResult(CallStatus.NoWaitingTicket, Nothing)
             End If
 
-            Dim ticketId As Guid
-            Dim ticketNumber As String
-            Dim deptName As String
+            Dim calledAt = DateTimeOffset.UtcNow
+            Dim resolvedCounter = If(String.IsNullOrWhiteSpace(counterName), "Counter 01", counterName.Trim())
+            waitingEntry.Ticket.Status = "Called"
+            waitingEntry.Ticket.CalledCounterName = resolvedCounter
+            waitingEntry.Ticket.CalledAtUtc = calledAt
+            Dim item = New QueueItem(waitingEntry.Ticket.Id,
+                waitingEntry.Ticket.Number,
+                waitingEntry.Ticket.ServiceName,
+                resolvedCounter,
+                waitingEntry.Ticket.Status,
+                calledAt)
 
-            If waitingEntry IsNot Nothing Then
-                ticketId = waitingEntry.Ticket.Id
-                ticketNumber = waitingEntry.Ticket.Number
-                deptName = waitingEntry.Ticket.ServiceName
-                waitingEntry.Ticket.Status = "Called"
-            Else
-                _nextSequence += 1
-                Dim prefix = GetDepartmentPrefix(normalizedDept)
-                ticketNumber = $"{prefix}-{_nextSequence:D3}"
-                ticketId = Guid.NewGuid()
-                deptName = NormalizeDepartmentName(normalizedDept)
-            End If
-
-            Dim item = New QueueItem(ticketId, ticketNumber, deptName, resolvedCounter, "Called", DateTimeOffset.UtcNow)
-            _activeCalls.Insert(0, item)
-            If _activeCalls.Count > 30 Then
-                _activeCalls.RemoveAt(_activeCalls.Count - 1)
-            End If
-
-            Return item
+            _callRequests.Add(idempotencyKey, New CallRequestEntry(serviceId, counterName, item))
+            Return New CallResult(CallStatus.Called, item)
         End SyncLock
-    End Function
-
-    Public Function RecallTicket(ticketNumber As String, counterName As String) As QueueItem
-        SyncLock _gate
-            EnsureDemoDisplayItems()
-
-            Dim target = _activeCalls.FirstOrDefault(Function(i) String.Equals(i.TicketNumber, ticketNumber, StringComparison.OrdinalIgnoreCase))
-            Dim ticketId = If(target IsNot Nothing, target.TicketId, Guid.NewGuid())
-            Dim deptName = If(target IsNot Nothing, target.Department, "General")
-            Dim resolvedCounter = If(Not String.IsNullOrWhiteSpace(counterName), counterName.Trim(), If(target IsNot Nothing, target.CounterName, "Counter 01"))
-            Dim resolvedNumber = If(Not String.IsNullOrWhiteSpace(ticketNumber), ticketNumber.Trim(), "A-101")
-
-            Dim item = New QueueItem(ticketId, resolvedNumber, deptName, resolvedCounter, "Recalled", DateTimeOffset.UtcNow)
-            _activeCalls.Insert(0, item)
-            If _activeCalls.Count > 30 Then
-                _activeCalls.RemoveAt(_activeCalls.Count - 1)
-            End If
-
-            Return item
-        End SyncLock
-    End Function
-
-    Private Sub EnsureDemoDisplayItems()
-        If _activeCalls.Count > 0 Then Return
-
-        Dim now = DateTimeOffset.UtcNow
-        _activeCalls.Add(New QueueItem(Guid.NewGuid(), "A-101", "Admissions", "Counter 01", "Called", now.AddSeconds(-25)))
-        _activeCalls.Add(New QueueItem(Guid.NewGuid(), "B-042", "Billing", "Counter 03", "Called", now.AddMinutes(-2)))
-        _activeCalls.Add(New QueueItem(Guid.NewGuid(), "C-104", "Consultation", "Window 2", "Called", now.AddMinutes(-4)))
-        _activeCalls.Add(New QueueItem(Guid.NewGuid(), "L-018", "Laboratory", "Station 3", "Called", now.AddMinutes(-7)))
-        _activeCalls.Add(New QueueItem(Guid.NewGuid(), "P-009", "Pharmacy", "Window 4", "Called", now.AddMinutes(-11)))
-        _activeCalls.Add(New QueueItem(Guid.NewGuid(), "C-103", "Consultation", "Window 1", "Completed", now.AddMinutes(-15)))
-    End Sub
-
-    Private Shared Function GetDepartmentPrefix(dept As String) As String
-        If String.IsNullOrWhiteSpace(dept) Then Return "A"
-        Select Case dept.Trim().ToLowerInvariant()
-            Case "admissions", "adm"
-                Return "A"
-            Case "billing", "bill", "cashier"
-                Return "B"
-            Case "consultation", "consult", "doctor"
-                Return "C"
-            Case "laboratory", "lab"
-                Return "L"
-            Case "pharmacy", "pharm"
-                Return "P"
-            Case Else
-                Return dept.Trim().Substring(0, 1).ToUpperInvariant()
-        End Select
-    End Function
-
-    Private Shared Function NormalizeDepartmentName(dept As String) As String
-        If String.IsNullOrWhiteSpace(dept) Then Return "Consultation"
-        Select Case dept.Trim().ToLowerInvariant()
-            Case "admissions", "adm"
-                Return "Admissions"
-            Case "billing", "bill", "cashier"
-                Return "Billing"
-            Case "consultation", "consult"
-                Return "Consultation"
-            Case "laboratory", "lab"
-                Return "Laboratory"
-            Case "pharmacy", "pharm"
-                Return "Pharmacy"
-            Case Else
-                Return CultureInfo.InvariantCulture.TextInfo.ToTitleCase(dept.Trim())
-        End Select
     End Function
 
     Private NotInheritable Class QueueEntry
@@ -183,6 +124,18 @@ Public NotInheritable Class QueueDemoStore
 
         Public ReadOnly Property Sequence As Long
         Public ReadOnly Property Ticket As DemoTicket
+    End Class
+
+    Private NotInheritable Class CallRequestEntry
+        Public Sub New(serviceId As String, counterName As String, item As QueueItem)
+            Me.ServiceId = serviceId
+            Me.CounterName = counterName
+            Me.Item = item
+        End Sub
+
+        Public ReadOnly Property ServiceId As String
+        Public ReadOnly Property CounterName As String
+        Public ReadOnly Property Item As QueueItem
     End Class
 End Class
 
@@ -230,6 +183,8 @@ Public NotInheritable Class DemoTicket
     Public ReadOnly Property ServiceName As String
     Public Property Status As String
     Public ReadOnly Property IssuedAtUtc As DateTimeOffset
+    Public Property CalledCounterName As String
+    Public Property CalledAtUtc As DateTimeOffset?
 End Class
 
 Public NotInheritable Class QueueDisplaySnapshot
@@ -265,6 +220,24 @@ Public NotInheritable Class IssueResult
     Public ReadOnly Property Status As IssueStatus
     Public ReadOnly Property Ticket As DemoTicket
 End Class
+
+Public NotInheritable Class CallResult
+    Public Sub New(status As CallStatus, item As QueueItem)
+        Me.Status = status
+        Me.Item = item
+    End Sub
+
+    Public ReadOnly Property Status As CallStatus
+    Public ReadOnly Property Item As QueueItem
+End Class
+
+Public Enum CallStatus
+    Called
+    Replayed
+    InvalidService
+    NoWaitingTicket
+    IdempotencyConflict
+End Enum
 
 Public Enum IssueStatus
     Created
