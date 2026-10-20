@@ -15,10 +15,11 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: `${dotnetCommand} run --no-launch-profile --project ../backend/Queuing.Api/Queuing.Api.csproj --urls http://127.0.0.1:5271`,
-      url: "http://127.0.0.1:5271/api/v1/services",
+      command: `${dotnetCommand} run --no-launch-profile --project ../backend/Queuing.Api/Queuing.Api.csproj -- --urls http://127.0.0.1:5271`,
+      url: "http://127.0.0.1:5271/health/live",
       reuseExistingServer: false,
       timeout: 120_000,
+      env: { ASPNETCORE_ENVIRONMENT: "Development" },
     },
     {
       command: "npm run dev -- --host 127.0.0.1 --port 4173 --strictPort",
