@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getDisplaySnapshot, getServices, issueTicket } from "./api.js";
+import { callNextTicket, getDisplaySnapshot, getServices, issueTicket } from "./api.js";
 
 function TicketReceipt({ ticket }) {
   if (!ticket) return null;
@@ -26,11 +26,14 @@ export default function QueueDashboard() {
   const [ticket, setTicket] = useState(null);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
+  const [callPending, setCallPending] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [displayError, setDisplayError] = useState("");
   const [issueError, setIssueError] = useState("");
+  const [callError, setCallError] = useState("");
   const [message, setMessage] = useState("");
   const issueKey = useRef(null);
+  const callKeys = useRef(new Map());
 
   useEffect(() => {
     const controller = new AbortController();
@@ -72,6 +75,30 @@ export default function QueueDashboard() {
     }
   }
 
+  async function callNext() {
+    setCallPending(true);
+    setCallError("");
+    setMessage("");
+    const key = callKeys.current.get(serviceId) ?? crypto.randomUUID();
+    callKeys.current.set(serviceId, key);
+
+    try {
+      const called = await callNextTicket(serviceId, "Counter 01", key);
+      callKeys.current.delete(serviceId);
+      setMessage(`Now calling ${called.ticketNumber} at ${called.counterName}.`);
+      try {
+        setSnapshot(await getDisplaySnapshot());
+        setDisplayError("");
+      } catch (error) {
+        setDisplayError(`Ticket called, but the dashboard could not refresh: ${error.message}`);
+      }
+    } catch (error) {
+      setCallError(error.message);
+    } finally {
+      setCallPending(false);
+    }
+  }
+
   return (
     <section aria-labelledby="dashboard-heading">
       <div className="page-heading dashboard-heading">
@@ -87,10 +114,10 @@ export default function QueueDashboard() {
           <p className="panel-description">Choose a service. The API assigns the next ticket number.</p>
           <form onSubmit={submitTicket}>
             <label htmlFor="dashboard-service">Service</label>
-            <select id="dashboard-service" value={serviceId} onChange={(event) => { setServiceId(event.target.value); issueKey.current = null; }} disabled={loading || pending || services.length === 0}>
+            <select id="dashboard-service" value={serviceId} onChange={(event) => { setServiceId(event.target.value); issueKey.current = null; }} disabled={loading || pending || callPending || services.length === 0}>
               {services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}
             </select>
-            <button className="button button-dark" type="submit" disabled={loading || pending || !serviceId}>
+            <button className="button button-dark" type="submit" disabled={loading || pending || callPending || !serviceId}>
               {pending ? "Issuing…" : "Issue ticket"}
             </button>
           </form>
@@ -113,12 +140,14 @@ export default function QueueDashboard() {
             {snapshot && snapshot.totalWaiting > snapshot.waiting.length && <p className="board-note">Showing the next {snapshot.waiting.length} tickets.</p>}
           </section>
           <section className="board-waiting board-calling" aria-labelledby="calling-heading">
-            <div className="section-heading"><div><p className="eyebrow eyebrow-light">NOW CALLING</p><h3 id="calling-heading">Calling tickets</h3></div></div>
+            <div className="section-heading"><div><p className="eyebrow eyebrow-light">NOW CALLING</p><h3 id="calling-heading">Calling tickets</h3></div><button className="button button-dark" type="button" onClick={callNext} disabled={loading || pending || callPending || !serviceId}>{callPending ? "Calling…" : "Call next"}</button></div>
             <ul>
               {!snapshot && <li className="board-empty">Queue display is loading.</li>}
               {snapshot?.calling.length === 0 && <li className="board-empty">No tickets are being called.</li>}
               {snapshot?.calling.map((calledTicket) => <li key={calledTicket.number}><strong>{calledTicket.number}</strong><span>{calledTicket.serviceName}</span><span>{calledTicket.status}</span></li>)}
             </ul>
+            {callError && <p className="action-message" role="alert">{callError}</p>}
+            {callPending && <p className="panel-description" role="status">Calling the next {services.find((service) => service.id === serviceId)?.name ?? "selected service"} ticket…</p>}
           </section>
           <footer className="board-footer"><span>Ticket number, service, and status only.</span><span>Queue clears when the API restarts.</span></footer>
         </section>

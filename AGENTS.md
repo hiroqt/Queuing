@@ -22,7 +22,7 @@ Build and maintain a **basic clinic queue** toward the proposed React/TypeScript
 - API controllers are thin: authenticate, validate contract, invoke use case, map responses.
 - Prefer feature folders/vertical slices *inside* a modular monolith. Do not add microservices, generic repositories, message brokers or Redis without measured need.
 - Use PostgreSQL transactions/constraints for ticket sequencing, atomic call-next and state changes; no in-memory counters as source of truth.
-- `docs/specs/003-presentation-queue/` explicitly permits process-local in-memory state for a localhost presentation demo only. This exception is not durable queue authority and must not be extended to clinic operations or production.
+- `docs/specs/003-presentation-queue/` and `docs/specs/004-demo-call-flow/` permit process-local in-memory state and service-scoped call-next for a localhost presentation demo only. Keep issue/call/display projections on one store; do not fabricate tickets or call across services. This exception is not durable queue authority and must not be extended to clinic operations or production.
 - Persist first, publish realtime changes after commit via outbox/dispatcher. SignalR is a notification mechanism, not the record of truth. Clients refresh snapshot on reconnect.
 - Configuration of service/counter/screen/template is data-driven; executable modules and layouts come from a controlled code registry.
 

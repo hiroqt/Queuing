@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getDisplaySnapshot, getServices, issueTicket } from "../../src/features/queue/api.js";
+import { callNextTicket, getDisplaySnapshot, getServices, issueTicket } from "../../src/features/queue/api.js";
 
 test("loads the service catalog and anonymous display snapshot from the API", async () => {
   const originalFetch = globalThis.fetch;
@@ -35,6 +35,26 @@ test("issues a ticket with the selected service and idempotency key", async () =
     assert.equal(request.options.method, "POST");
     assert.equal(request.options.headers["Idempotency-Key"], "attempt-id");
     assert.deepEqual(JSON.parse(request.options.body), { serviceId: "consultation" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("calls the next ticket for the selected service with an idempotency key", async () => {
+  const originalFetch = globalThis.fetch;
+  let request;
+  const calledTicket = { ticketNumber: "001", department: "Consultation", counterName: "Counter 01", status: "Called" };
+  globalThis.fetch = async (url, options) => {
+    request = { url, options };
+    return new Response(JSON.stringify(calledTicket), { status: 200 });
+  };
+
+  try {
+    assert.deepEqual(await callNextTicket("consultation", "Counter 01", "call-attempt-id"), calledTicket);
+    assert.equal(request.url, "/api/v1/queue/call-next");
+    assert.equal(request.options.method, "POST");
+    assert.equal(request.options.headers["Idempotency-Key"], "call-attempt-id");
+    assert.deepEqual(JSON.parse(request.options.body), { serviceId: "consultation", counterName: "Counter 01" });
   } finally {
     globalThis.fetch = originalFetch;
   }

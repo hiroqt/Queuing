@@ -2,6 +2,8 @@
 
 **Status:** Approved for local demonstration | **Date:** 2026-10-19 | **Related:** PRD FR-01, FR-08, FR-09; ARD §§2, 5, 8, 11
 
+> The initial issue/display-only scope is preserved as history. The current local demo call flow is specified in [SPEC-004](../004-demo-call-flow/spec.md), which supersedes this document only for call and display behavior.
+
 ## Goal and boundary
 
 Connect the existing React app to the ASP.NET Core API for one local presentation dashboard that issues a ticket, shows its printable confirmation, and displays queue state. This is a demo slice, not production queue infrastructure.

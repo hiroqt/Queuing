@@ -103,50 +103,93 @@ public sealed class QueueDemoStoreTests
     }
 
     [Fact]
-    public void GetActiveDisplayQueue_returns_active_calls_with_queue_item_properties()
+    public void Fresh_store_has_no_fabricated_display_items()
     {
         var store = new QueueDemoStore();
-        var items = store.GetActiveDisplayQueue();
 
-        Assert.NotEmpty(items);
-        var first = items[0];
-        Assert.NotEqual(Guid.Empty, first.TicketId);
-        Assert.False(string.IsNullOrWhiteSpace(first.TicketNumber));
-        Assert.False(string.IsNullOrWhiteSpace(first.Department));
-        Assert.False(string.IsNullOrWhiteSpace(first.CounterName));
-        Assert.False(string.IsNullOrWhiteSpace(first.Status));
+        Assert.Empty(store.GetActiveDisplayQueue());
+        Assert.Empty(store.GetDisplaySnapshot().Calling);
     }
 
     [Fact]
-    public void CallNext_advances_waiting_ticket_to_called_status()
+    public void CallNext_selects_oldest_waiting_ticket_for_the_selected_service()
     {
         var store = new QueueDemoStore();
-        var issueResult = store.Issue(ServiceIds[0], Guid.NewGuid());
-        Assert.Equal("001", issueResult.Ticket!.Number);
+        store.Issue(ServiceIds[0], Guid.NewGuid());
+        store.Issue(ServiceIds[1], Guid.NewGuid());
+        store.Issue(ServiceIds[1], Guid.NewGuid());
 
-        var calledItem = store.CallNext("Consultation", "Counter 02");
-        Assert.Equal("001", calledItem.TicketNumber);
-        Assert.Equal("Consultation", calledItem.Department);
-        Assert.Equal("Counter 02", calledItem.CounterName);
-        Assert.Equal("Called", calledItem.Status);
+        var result = store.CallNext(ServiceIds[1], "Counter 01", Guid.NewGuid());
 
-        var active = store.GetActiveDisplayQueue();
-        Assert.Equal(calledItem.TicketNumber, active[0].TicketNumber);
+        Assert.Equal(CallStatus.Called, result.Status);
+        Assert.Equal("002", result.Item!.TicketNumber);
+        Assert.Equal("Laboratory", result.Item.Department);
+        Assert.Equal("Counter 01", result.Item.CounterName);
+        Assert.Equal("Called", result.Item.Status);
+        Assert.Equal(new[] { "002" }, store.GetActiveDisplayQueue().Select(item => item.TicketNumber));
+        Assert.Equal(new[] { "001", "003" }, store.GetDisplaySnapshot().Waiting.Select(ticket => ticket.Number));
     }
 
     [Fact]
-    public void RecallTicket_prepends_recalled_entry()
+    public void CallNext_does_not_fall_back_to_another_service_or_create_a_ticket()
     {
         var store = new QueueDemoStore();
-        var recalled = store.RecallTicket("A-101", "Counter 03");
+        var issued = store.Issue(ServiceIds[1], Guid.NewGuid());
 
-        Assert.Equal("A-101", recalled.TicketNumber);
-        Assert.Equal("Counter 03", recalled.CounterName);
-        Assert.Equal("Recalled", recalled.Status);
+        var result = store.CallNext(ServiceIds[0], "Counter 01", Guid.NewGuid());
 
-        var active = store.GetActiveDisplayQueue();
-        Assert.Equal("A-101", active[0].TicketNumber);
-        Assert.Equal("Recalled", active[0].Status);
+        Assert.Equal(CallStatus.NoWaitingTicket, result.Status);
+        Assert.Equal("Waiting", store.GetTicket(issued.Ticket!.Id)!.Status);
+        Assert.Empty(store.GetActiveDisplayQueue());
+
+        var next = store.Issue(ServiceIds[0], Guid.NewGuid());
+        Assert.Equal("002", next.Ticket!.Number);
+    }
+
+    [Fact]
+    public void CallNext_rejects_unknown_services_without_changing_queue()
+    {
+        var store = new QueueDemoStore();
+        store.Issue(ServiceIds[0], Guid.NewGuid());
+
+        var result = store.CallNext("unknown", "Counter 01", Guid.NewGuid());
+
+        Assert.Equal(CallStatus.InvalidService, result.Status);
+        Assert.Equal(new[] { "001" }, store.GetDisplaySnapshot().Waiting.Select(ticket => ticket.Number));
+        Assert.Empty(store.GetActiveDisplayQueue());
+    }
+
+    [Fact]
+    public void CallNext_retries_with_same_key_return_same_ticket_without_calling_another()
+    {
+        var store = new QueueDemoStore();
+        store.Issue(ServiceIds[0], Guid.NewGuid());
+        store.Issue(ServiceIds[0], Guid.NewGuid());
+        var key = Guid.NewGuid();
+
+        var first = store.CallNext(ServiceIds[0], "Counter 01", key);
+        var retry = store.CallNext(ServiceIds[0], "Counter 01", key);
+        var next = store.CallNext(ServiceIds[0], "Counter 01", Guid.NewGuid());
+
+        Assert.Equal(CallStatus.Called, first.Status);
+        Assert.Equal(CallStatus.Replayed, retry.Status);
+        Assert.Equal(first.Item!.TicketNumber, retry.Item!.TicketNumber);
+        Assert.Equal("001", retry.Item.TicketNumber);
+        Assert.Equal("002", next.Item!.TicketNumber);
+    }
+
+    [Fact]
+    public void CallNext_rejects_reusing_key_for_different_request()
+    {
+        var store = new QueueDemoStore();
+        store.Issue(ServiceIds[0], Guid.NewGuid());
+        var key = Guid.NewGuid();
+        store.CallNext(ServiceIds[0], "Counter 01", key);
+
+        var conflict = store.CallNext(ServiceIds[0], "Counter 02", key);
+
+        Assert.Equal(CallStatus.IdempotencyConflict, conflict.Status);
+        Assert.Equal(new[] { "001" }, store.GetActiveDisplayQueue().Select(item => item.TicketNumber));
     }
 }
 

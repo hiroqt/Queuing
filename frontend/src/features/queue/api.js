@@ -27,3 +27,14 @@ export function issueTicket(serviceId, idempotencyKey) {
     body: JSON.stringify({ serviceId }),
   });
 }
+
+export function callNextTicket(serviceId, counterName, idempotencyKey) {
+  return request("/api/v1/queue/call-next", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Idempotency-Key": idempotencyKey,
+    },
+    body: JSON.stringify({ serviceId, counterName }),
+  });
+}
