@@ -18,7 +18,9 @@ Queuing/
 │   ├── src/
 │   │   ├── App.jsx        # shared shell and frontend routes
 │   │   ├── data/          # synthetic admin preview snapshot
-│   │   └── features/      # combined queue dashboard and admin preview
+│   │   ├── features/      # combined issue/call dashboard and admin preview
+│   │   ├── pages/         # standalone public TV display
+│   │   └── services/      # SignalR read-only display client
 │   └── tests/             # Node unit tests and Playwright E2E
 ├── docs/                  # code map, specs, ADRs, decisions, templates, runbooks
 └── skills/
@@ -27,7 +29,7 @@ Queuing/
     └── render/               # frontend design workflow and progressive references
 ```
 
-The projects target .NET 10. SPEC-003 adds a local backend-connected presentation slice for ticket issue and display. Queue state is volatile, has no sign-in, and is not production infrastructure. Admin setup remains a static preview; do not infer database modules, migrations, or production services from the broader design documents.
+The projects target .NET 10. SPEC-003/SPEC-004 define a local backend-connected presentation slice for ticket issue, service-scoped call-next, and display. Queue state is volatile, has no sign-in, and is not production infrastructure. Admin setup remains a static preview; do not infer database modules, migrations, or production services from the broader design documents.
 
 ## Growth path
 

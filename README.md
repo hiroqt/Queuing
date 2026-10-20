@@ -1,6 +1,6 @@
 # Queuing
 
-This repository contains a local presentation slice of the clinic queue MVP plus the broader proposed product specification. The demo supports ticket issue and display only; it is not production queue infrastructure.
+This repository contains a local presentation slice of the clinic queue MVP plus the broader proposed product specification. The demo supports ticket issue, service-scoped Call next, and public display; it is not production queue infrastructure.
 
 ## Current code
 
@@ -9,7 +9,7 @@ This repository contains a local presentation slice of the clinic queue MVP plus
 - Core library: VB.NET in `backend/Queuing.Core/`; currently owns the demo catalog and in-memory queue.
 - Solution: `Queuing.slnx`.
 
-The presentation dashboard issues one shared sequence (`001`, `002`, …) across Consultation, Laboratory, and Follow-up. Its public projection shows up to three waiting tickets, followed by an empty calling section. Queue data clears when the API restarts. No sign-in or database is configured; run locally with synthetic data only. Admin setup remains a separate static preview.
+The empty presentation dashboard issues one shared sequence (`001`, `002`, …) across Consultation, Laboratory, and Follow-up. Staff can call the oldest waiting ticket for the selected service; the dashboard and public display read the same in-memory queue. The dashboard shows up to three waiting tickets followed by called tickets; the public display focuses on current and recent calls. Queue data clears when the API restarts. No sign-in or database is configured; bind the demo to loopback and use synthetic data only. Admin setup remains a separate static preview.
 
 Keep this small structure until real features require more boundaries. The target React/TypeScript architecture in `ARD.md` is a proposal; language or framework migrations require an approved spec.
 
@@ -22,6 +22,7 @@ Keep this small structure until real features require more boundaries. The targe
 - `docs/specs/` — feature specs and acceptance criteria.
 - `docs/specs/002-frontend-mvp-demo/` — original frontend-only preview scope.
 - `docs/specs/003-presentation-queue/` — approved local backend-connected presentation scope and acceptance criteria.
+- `docs/specs/004-demo-call-flow/` — approved local call-next flow, consistency rules, and acceptance criteria.
 - `skills/project-knowledge/SKILL.md` — default persistent-knowledge, documentation, and commit/PR guidance for all agents.
 - `skills/clinic-queue/SKILL.md` — specialist implementation and review guidance.
 - `skills/render/SKILL.md` — frontend design and implementation guidance; sourced from [hiroqt/overdrive](https://github.com/hiroqt/overdrive) at commit `1686bca01365d76f8e25cfb7a0ee7ccb7920e76e` (MIT; license included).
@@ -48,7 +49,7 @@ npm --prefix frontend ci
 npm --prefix frontend run dev -- --host 127.0.0.1
 ```
 
-The Vite server proxies `/api` to the API. `npm --prefix frontend run test`, `npm --prefix frontend run lint`, and `npm --prefix frontend run build` run frontend checks. `npm --prefix frontend run test:e2e` starts both local servers; install Playwright Chromium with `npx playwright install chromium` in a fresh environment first.
+The Vite server proxies `/api` and `/hubs` to the loopback API. `npm --prefix frontend run test`, `npm --prefix frontend run lint`, and `npm --prefix frontend run build` run frontend checks. `npm --prefix frontend run test:e2e` starts both local servers; install Playwright Chromium with `npx playwright install chromium` in a fresh environment first.
 
 ## Read order
 
@@ -61,4 +62,4 @@ The Vite server proxies `/api` to the API. `npm --prefix frontend run test`, `np
 
 ## Status
 
-The production MVP remains a proposal. SPEC-003 authorizes only the local presentation slice; its in-memory sequence, anonymous local API, and missing call action must not be treated as clinic-ready behavior. Follow the relevant approved feature spec and verify the live code before claiming implementation or test coverage.
+The production MVP remains a proposal. SPEC-003 and SPEC-004 authorize only the local presentation slice; its in-memory queue, anonymous local API, and single-process SignalR transport must not be treated as clinic-ready behavior. Follow the relevant approved feature spec and verify the live code before claiming implementation or test coverage.
