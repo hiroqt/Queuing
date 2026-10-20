@@ -1,24 +1,26 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
-using Queuing.Api.Models;
-using Queuing.Core;
+using Queuing.Api.Auth;
 
 namespace Queuing.Api.Hubs;
 
-public sealed class QueueHub(QueueDemoStore queueStore) : Hub
+[Authorize(Policy = "DisplayDevice")]
+public sealed class QueueHub : Hub
 {
     public override async Task OnConnectedAsync()
     {
-        var snapshot = queueStore.GetActiveDisplayQueue()
-            .Select(QueueItemDto.FromCore);
-        await Clients.Caller.SendAsync("QueueStateSnapshot", snapshot);
+        var displayId = Context.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var departmentId = Context.User?.FindFirst("department_id")?.Value;
+        if (!Guid.TryParse(displayId, out var id) || !Guid.TryParse(departmentId, out _))
+        {
+            Context.Abort();
+            return;
+        }
+
+        await Groups.AddToGroupAsync(Context.ConnectionId, DisplayGroupName(id));
+        await Clients.Caller.SendAsync("QueueChanged");
         await base.OnConnectedAsync();
     }
 
-    public Task<IEnumerable<QueueItemDto>> GetSnapshot()
-    {
-        var snapshot = queueStore.GetActiveDisplayQueue()
-            .Select(QueueItemDto.FromCore);
-        return Task.FromResult(snapshot);
-    }
-
+    public static string DisplayGroupName(Guid displayId) => $"display:{displayId:N}";
 }

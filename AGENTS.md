@@ -21,14 +21,14 @@ Build and maintain a **basic clinic queue** toward the proposed React/TypeScript
 - Domain has no references to ASP.NET Core, EF Core, SignalR or presentation libraries.
 - API controllers are thin: authenticate, validate contract, invoke use case, map responses.
 - Prefer feature folders/vertical slices *inside* a modular monolith. Do not add microservices, generic repositories, message brokers or Redis without measured need.
-- Use PostgreSQL transactions/constraints for ticket sequencing, atomic call-next and state changes; no in-memory counters as source of truth.
+- Use the database selected by the approved feature ADR for ticket sequencing, atomic call-next and state changes. SPEC-005 selects MySQL 8.x/InnoDB and EF Core 10; other PostgreSQL references are proposals, not implementation authority. No in-memory counters as source of truth for this durable slice.
 - `docs/specs/003-presentation-queue/` and `docs/specs/004-demo-call-flow/` permit process-local in-memory state and service-scoped call-next for a localhost presentation demo only. Keep issue/call/display projections on one store; do not fabricate tickets or call across services. This exception is not durable queue authority and must not be extended to clinic operations or production.
 - Persist first, publish realtime changes after commit via outbox/dispatcher. SignalR is a notification mechanism, not the record of truth. Clients refresh snapshot on reconnect.
 - Configuration of service/counter/screen/template is data-driven; executable modules and layouts come from a controlled code registry.
 
 ## MVP scope fence
 Allowed: admin config of staff roles, services, counters, queue numbering, printer ticket formats, display registration/assignment and templates; staff issuance/call/recall/skip/complete; printable ticket; read-only public queue display; minimum auth/audit/ops plumbing.
-Disallowed until new approved spec: health records, patient PHI, appointments, payments, priority classes beyond explicitly approved policies, kiosks, SMS, push notifications, voice announcements, independent branches/multitenancy, offline issuing, dynamic code plugins.
+Disallowed until new approved spec: health records, patient PHI, appointment scheduling engines/imports, payments, priority classes beyond explicitly approved policies, kiosks, SMS, push notifications, voice announcements, independent branches/multitenancy, offline issuing, dynamic code plugins. SPEC-005 explicitly allows reception/staff to enter an optional local appointment time on each visit step; it does not approve scheduling integration.
 
 ## Coding and maintainability
 - C#: nullable enabled, async cancellation tokens, clear names, small methods, explicit result/error types, DI, options validation, bounded DbContext lifetimes; never block async (`.Result`/`.Wait`).
@@ -59,8 +59,8 @@ Disallowed until new approved spec: health records, patient PHI, appointments, p
 7. Audit trail records change who/what/when, never silently overwrites history.
 
 ## Tests required per changed capability
-- Domain transition and numbering tests; integration DB tests against real PostgreSQL (prefer Testcontainers); concurrent call-next; retry/idempotency; authorization matrix; API contract tests; React component + accessibility tests; display SignalR reconnect; printing 58/80mm preview; end-to-end happy path; migration and restore smoke tests.
-- Run only checks configured in the current projects. `dotnet test Queuing.slnx` covers the demo queue core; it is not PostgreSQL integration coverage. The frontend exposes `test` (Node API-client unit tests), `test:e2e` (Playwright starts the API and Vite locally), `lint`, and `build`, but no typecheck script. Do not report unavailable commands as passing.
+- Domain transition and numbering tests; integration DB tests against the approved engine (MySQL 8.x for SPEC-005); concurrent call-next; retry/idempotency; authorization matrix; API contract tests; React component + accessibility tests; display SignalR reconnect; printing 58/80mm preview; end-to-end happy path; migration and restore smoke tests.
+- Run only checks configured in the current projects. `dotnet test Queuing.slnx` covers core workflow rules; it is not MySQL integration coverage. The frontend exposes `test` (Node API-client unit tests), `test:e2e` (Playwright starts the API and Vite locally), `lint`, and `build`, but no typecheck script. Do not report unavailable commands as passing.
 - Record exact commands/results and distinguish current checks from future acceptance requirements.
 
 ## Work format

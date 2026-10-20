@@ -1,12 +1,14 @@
 # ARD — Architecture Requirements & Design
 
-**Document ID:** ARD-CQ-001 | **Version:** 0.1 | **Status:** Proposed | **Scope:** PRD-CQ-001 MVP. **Expandability:** append module contracts and ADRs; do not pre-build hypothetical services.
+**Document ID:** ARD-CQ-001 | **Version:** 0.2 | **Status:** Proposed with approved SPEC-005 decisions | **Scope:** PRD-CQ-001 MVP and addenda. **Expandability:** append module contracts and ADRs; do not pre-build hypothetical services.
+
+> Database decision update: ADR-0002 and SPEC-005 supersede PostgreSQL references in this draft for the forwarding implementation. Use MySQL 8.x with EF Core 10. Replace PostgreSQL-specific concurrency guidance below with MySQL/InnoDB constraints, transactions, locking, and integration tests.
 
 ## 1. Drivers
-Correctness under concurrent use, staff least-privilege, public data minimization, configure-not-code clinic setup, recoverability, and straightforward deployment for small clinics. Architectural choice: **modular monolith**—one ASP.NET Core API process, one PostgreSQL DB, one React SPA (admin/staff/display routes). Separate modules in code, not separate deployments.
+Correctness under concurrent use, staff least-privilege, public data minimization, configure-not-code clinic setup, recoverability, and straightforward deployment for small clinics. Architectural choice: **modular monolith**—one ASP.NET Core API process, one MySQL 8.x DB for SPEC-005, one React SPA (admin/staff/display routes). Separate modules in code, not separate deployments.
 
 ## 2. System context
-React SPA (admin/staff) → HTTPS REST API → use cases → EF Core/PostgreSQL. Public display React route → scoped display snapshot endpoint + authenticated display SignalR subscription. Outbox dispatcher emits *notification of change* after transaction commit; display fetches latest snapshot. Reverse proxy uses same origin (`/`, `/api`, `/hubs`); TLS termination; host health checks.
+React SPA (admin/staff) → HTTPS REST API → use cases → EF Core/MySQL. Public display React route → scoped display snapshot endpoint + authenticated display SignalR subscription. Outbox dispatcher emits *notification of change* after transaction commit; display fetches latest snapshot. Reverse proxy uses same origin (`/`, `/api`, `/hubs`); TLS termination; host health checks.
 
 ## 3. Code boundaries
 - `IdentityAccess`: ASP.NET Core Identity and server policies, staff-counter assignments.
@@ -25,10 +27,10 @@ See `docs/STRUCTURE.md` for exhaustive tree and `docs/adr/0001-architecture.md` 
 - `Service(id, name, prefix, active, sort_order)`
 - `Counter(id, label, active)`; `CounterService(counter_id, service_id)`
 - `StaffCounterAssignment(user_id, counter_id, active)`
-- `QueueSession(id, service_id, local_date, reset_bucket, status)`
-- `QueueSequence(queue_session_id, next_number)` locked/atomically incremented in transaction
-- `Ticket(id, session_id, service_id, sequence, rendered_number, state, assigned_counter_id?, issued_at_utc, called_at_utc?, completed_at_utc?, version)`
-- `TicketEvent(id, ticket_id, kind, actor_id, occurred_at_utc, metadata_safe)`
+- `Visit(id, clinic_date, sequence, rendered_code, state, issued_by, issued_at_utc, current_step_id?, version)`; one stable clinic-wide daily visit code
+- `DepartmentStep(id, visit_id, department_id, appointment_at_utc?, state, entered_at_utc, called_at_utc?, completed_at_utc?, version)`; one active step pointer per visit
+- `DepartmentSequence` is internal queue ordering only; it does not issue a second patient-facing ticket code
+- `VisitEvent(id, visit_id, department_step_id?, kind, actor_id, occurred_at_utc, metadata_safe)`
 - `IdempotencyRecord(scope, key_hash, request_hash, result_ref, created_at_utc)`
 - `DisplayDevice(id, name, credential_hash, active, last_seen_at_utc)`
 - `DisplayProfile(id, template_key, config_json, version)`; `DisplayAssignment(display_id, service_id?, counter_id?)`
@@ -36,14 +38,15 @@ See `docs/STRUCTURE.md` for exhaustive tree and `docs/adr/0001-architecture.md` 
 - `AuditRecord(id, actor_id, action, target_type, target_id, timestamp_utc, correlation_id, safe_diff)`
 - `OutboxMessage(id, type, aggregate_id, payload, created_at_utc, published_at_utc?)`
 
-Keys: unique `(queue_session_id, sequence)`, unique service/prefix policy as appropriate, FK constraints, permitted state enum/check, concurrency token/version, indexed `(session_id,state,issued_at_utc)`, key scope uniqueness. Concurrency scheme and isolation level must be exercised against PostgreSQL, not only mocked/in-memory EF.
+Keys: unique `(clinic_date, sequence)`, FK constraints, permitted state enum/check, concurrency token/version, indexed `(department_id,state,appointment_at_utc,entered_at_utc)`, key scope uniqueness, and database-enforced one-active-step-per-visit. InnoDB concurrency and isolation behavior must be exercised against MySQL 8.x, not mocked/in-memory EF.
 
 ## 6. Queue state model
-`Waiting → Called → Completed`, `Called → Skipped`, `Skipped → Waiting` (recall/requeue **subject to clinic approval**), `Called → Called` for same-ticket recall announcement without changing ownership. Every transition is command-only, authorized and audited. Invalid transitions return `409 Conflict`; missing resource `404`; forbidden `403`; validation `400`/`422` per selected API standard. If recall semantics differ, update spec first.
+For SPEC-005, a visit has one stable code and a current department step. A step transitions `Pending → Called → Pending` for an explicit no-show, or `Called → Completed`; completion may atomically select and create one `Pending` next step. Final completion closes the visit. A future appointment is not eligible before its scheduled time. Every transition is command-only, authorized and audited. Invalid transitions return `409 Conflict`; missing resource `404`; forbidden `403`; validation `400`/`422` per API standard. This state model supersedes the earlier proposed skip/recall semantics for the SPEC-005 flow.
 
 ## 7. Atomic operations
-- **Issue:** validate active service and session; idempotency lookup scoped to actor/action; lock/update `QueueSequence` or use `INSERT ... ON CONFLICT ... DO UPDATE ... RETURNING` atomically; persist ticket/event/outbox within one transaction; commit; then notify.
-- **CallNext:** transaction obtains earliest eligible waiting ticket for assigned counter/service with row-level locks (`FOR UPDATE SKIP LOCKED` for competing workers, consistent ordering); conditional update status/assigned counter; event/outbox; commit; return selected ticket. Use EF with careful SQL where needed. Define fairness and priority explicitly in product policy, not ad-hoc per controller.
+- **Issue:** validate Reception access; idempotency lookup; allocate the clinic-local daily visit sequence in an InnoDB transaction with a unique constraint; persist visit/event/outbox; commit; then notify.
+- **CallNext:** transaction obtains the earliest eligible due appointment, then FIFO walk-in for the assigned department; excludes future appointments and uses MySQL 8.x-verified locking or conditional updates; persist event/outbox and commit before returning the visit.
+- **Forward:** atomically complete the active department step and create exactly one pending step at the selected active department; constraints and conditional updates prevent parallel active steps.
 - **Retry:** the same idempotency key and payload returns prior result; key reuse with different payload is rejected. Document key TTL/retention and enforce unique scope.
 - **Print:** print render is deterministic from persisted ticket + versioned template; printing is initiated by UI, physical success cannot be guaranteed by browser. Reprint preserves ticket ID and creates audit event.
 
@@ -69,7 +72,7 @@ MVP: print-specific React CSS/template (`58mm`, `80mm`) using browser print dial
 Structured logs with correlation IDs (no PHI), OpenTelemetry traces/metrics, health/liveness/readiness checks, EF migration as reviewed deployment step, backward-compatible config/DB changes, encrypted daily backups and restore drills, migration rollback/recovery playbook, secrets via environment/secret manager. Record errors, outbox lag, duplicate/conflict attempts, real-time disconnect counts. Set RPO/RTO with owner pre-launch. Test restarting backend and disconnecting display.
 
 ## 14. Non-functional validation
-Baseline pilot performance and concurrent load are defined in PRD. Use real PostgreSQL concurrency tests, e2e browser tests on supported browsers, real 58/80mm printer smoke test, OWASP-aligned security review and simulated restart/disconnect. Fail deployment if must-pass invariants fail.
+Baseline pilot performance and concurrent load are defined in PRD. Use real MySQL 8.x concurrency tests, e2e browser tests on supported browsers, real 58/80mm printer smoke test, OWASP-aligned security review and simulated restart/disconnect. Fail deployment if must-pass invariants fail.
 
 ## 15. Evolution
 Future capabilities attach new domain module, contracts, migration boundary, OpenAPI endpoints, screens and ADR if architectural. Avoid overbuilding a plugin runtime or event bus. Consider separate services only after measured scaling/team/deployment demands and a data ownership plan. Maintain a compatibility matrix for API/template/config revisions.

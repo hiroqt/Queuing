@@ -2,6 +2,8 @@
 
 **Document ID:** PRD-CQ-001 | **Version:** 0.1 | **Status:** Proposed | **Owner:** Product + Clinic operations | **Change policy:** MVP scope frozen after signoff; future capabilities append new versions and linked specifications.
 
+> Approved implementation addendum: [SPEC-005](docs/specs/005-forwarding-clinic-queue/spec.md) defines the forwarding workflow. It uses one stable anonymous visit code, manual appointment times, dynamic departments, department-scoped displays, and local MySQL. It does not imply the broader proposed PRD is fully implemented or approve production use.
+
 ## 1. Product statement
 A configurable, reliable clinic queue that staff can operate, admins can configure, and patients can follow through printed tickets and public displays. It is **not** a medical record system. All patient-facing views use anonymous ticket identifiers.
 
@@ -62,3 +64,7 @@ Clinic will supply printing hardware constraints, session/number-reset definitio
 
 ## 13. Expansion protocol (post-MVP)
 Each proposed new capability receives `PRD-CQ-00N` addendum: user problem, bounded context, data sensitivity, role matrix, acceptance and non-goals. Update ARD/ADR and a new numbered spec before coding. Future ideas: appointments, multiple branches, kiosk, reporting, priority, integrations; **not pre-approved**.
+
+### Approved forwarding workflow addendum — 2026-10-20
+
+See [SPEC-005](docs/specs/005-forwarding-clinic-queue/spec.md) and [ADR-0002](docs/adr/0002-mysql-and-forwarding-visits.md). Decisions: local MySQL 8.x; `Asia/Manila`; one clinic-wide daily visit code that remains unchanged across departments; manual optional appointment entry per department step; due appointments before FIFO walk-ins; one active department step per visit; Admin, Reception, and department-assigned Staff; admin-created revocable monitors scoped to one department. No patient identity fields or external appointment-system integration.
