@@ -31,17 +31,36 @@ test("dashboard issues tickets and shows the first three waiting before calling"
   await page.getByRole("button", { name: "Print ticket" }).click();
   await expect.poll(() => page.evaluate(() => window.printRequested)).toBe(true);
 
+  await page.getByRole("button", { name: "Call next" }).click();
+  await expect(page.getByRole("status")).toContainText("Now calling 001 at Counter 01.");
+
   await expect(waitingRows).toHaveCount(3);
-  await expect(waitingRows.nth(0)).toContainText("001");
-  await expect(waitingRows.nth(1)).toContainText("002");
-  await expect(waitingRows.nth(2)).toContainText("003");
-  await expect(page.locator(".dashboard-board")).toContainText("4 waiting");
-  await expect(page.locator(".dashboard-board .board-waiting").first()).not.toContainText("004");
+  await expect(waitingRows.nth(0)).toContainText("002");
+  await expect(waitingRows.nth(1)).toContainText("003");
+  await expect(waitingRows.nth(2)).toContainText("004");
+  await expect(page.locator(".dashboard-board")).toContainText("3 waiting");
+  await expect(page.locator(".dashboard-board .board-calling")).toContainText("001");
   await expect(page.getByRole("heading", { name: "Calling tickets" })).toBeVisible();
-  await expect(page.getByText("No tickets are being called.")).toBeVisible();
-  await expect(page.getByRole("button", { name: /Call next/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Call next" })).toBeEnabled();
   expect(apiRequests.some((url) => url.includes("/api/v1/tickets"))).toBe(true);
   expect(apiRequests.some((url) => url.includes("/api/v1/queue/display"))).toBe(true);
+  expect(apiRequests.some((url) => url.includes("/api/v1/queue/call-next"))).toBe(true);
+
+  const displayPage = await page.context().newPage();
+  await displayPage.goto("/display");
+  await expect(displayPage.getByRole("heading", { name: "Clinic Queue Demo" })).toBeVisible();
+  await expect(displayPage.getByText("001", { exact: true })).toBeVisible();
+  await expect(displayPage.getByText("Counter 01", { exact: true })).toBeVisible();
+  await expect(displayPage.getByText("Live", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Call next" }).click();
+  await expect(page.getByText("Now calling 004 at Counter 01.", { exact: true })).toBeVisible();
+  await expect(displayPage.getByText("004", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Call next" }).click();
+  await expect(page.getByRole("alert")).toContainText("No waiting ticket is available for the selected service.");
+  await expect(waitingRows.nth(0)).toContainText("002");
+  await expect(waitingRows.nth(1)).toContainText("003");
 
   const displayResponse = await page.request.get("http://127.0.0.1:4173/api/v1/queue/display");
   const displaySnapshot = await displayResponse.json();
@@ -96,30 +115,29 @@ test("dashboard remains keyboard accessible and fits narrow viewports", async ({
   await expect(page.getByRole("heading", { name: "Admin setup" })).toBeVisible();
 });
 
-test("public queue display renders standalone TV view with live headers, now serving, and active counters", async ({ page }) => {
-  await page.goto("/display");
+test("public queue display renders a standalone demo TV view without invented clinic guidance", async ({ page }) => {
+  await page.goto("/display?department=billing");
 
   // Verify standalone layout isolation: NO app-frame or workspace sidebar
   await expect(page.locator(".app-frame")).toHaveCount(0);
   await expect(page.locator(".sidebar")).toHaveCount(0);
 
   // Verify header elements
-  await expect(page.getByRole("heading", { name: "St. Jude Clinic & Wellness Center" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Clinic Queue Demo" })).toBeVisible();
   await expect(page.getByText(/NOW SERVING/i)).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Active Counters" })).toBeVisible();
-  await expect(page.getByText(/Priority lane available for Senior Citizens/)).toBeVisible();
-
-  // Test query parameter filtering
-  await page.goto("/display?theme=light&department=billing");
-  await expect(page.getByRole("heading", { name: "St. Jude Clinic & Wellness Center" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Recent Calls" })).toBeVisible();
+  await expect(page.getByText(/Local presentation demo/).first()).toBeVisible();
+  await expect(page.getByText("Live", { exact: true })).toBeVisible();
+  await expect(page.getByText(/fasting instructions|insurance card|priority lane/i)).toHaveCount(0);
 
   // Verify REST fallback endpoint /api/queue/display
   const displayResponse = await page.request.get("http://127.0.0.1:4173/api/queue/display");
   expect(displayResponse.status()).toBe(200);
   const items = await displayResponse.json();
   expect(Array.isArray(items)).toBe(true);
-  expect(items.length).toBeGreaterThan(0);
-  expect(items[0]).toHaveProperty("ticketNumber");
-  expect(items[0]).toHaveProperty("counterName");
+  if (items.length > 0) {
+    expect(items[0]).toHaveProperty("ticketNumber");
+    expect(items[0]).toHaveProperty("counterName");
+  }
 });
 

@@ -1,33 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
-import { Maximize, Minimize, Volume2, VolumeX } from "lucide-react";
+import { Maximize, Minimize } from "lucide-react";
 import { useQueueDisplay } from "../services/queueHub.js";
 
 export default function QueueDisplay() {
   const [searchParams] = useSearchParams();
 
   const departmentParam = searchParams.get("department") || "all";
-  const soundParam = searchParams.get("sound") !== "false";
 
-  const [soundEnabled, setSoundEnabled] = useState(soundParam);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [controlsVisible, setControlsVisible] = useState(true);
   const [isAlertFlashing, setIsAlertFlashing] = useState(false);
-
-  const controlsTimeoutRef = useRef(null);
 
   const {
     currentCall,
     recentCalls,
     connectionState,
     lastAlertEvent,
-    audioUnlocked,
-    unlockAudio,
-  } = useQueueDisplay({
-    department: departmentParam,
-    soundEnabled,
-  });
+  } = useQueueDisplay({ department: departmentParam });
 
   const toggleFullscreen = useCallback(async () => {
     try {
@@ -67,40 +57,20 @@ export default function QueueDisplay() {
     return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
 
-  // Auto-hide controls after 3 seconds of inactivity
   useEffect(() => {
-    const showControls = () => {
-      setControlsVisible(true);
-      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
-      controlsTimeoutRef.current = setTimeout(() => {
-        setControlsVisible(false);
-      }, 3000);
-    };
-
     const handleKeyDown = (e) => {
       if (e.key === "f" || e.key === "F") {
         e.preventDefault();
         toggleFullscreen();
       }
-      showControls();
     };
 
-    window.addEventListener("mousemove", showControls);
     window.addEventListener("keydown", handleKeyDown);
-    showControls();
 
     return () => {
-      window.removeEventListener("mousemove", showControls);
       window.removeEventListener("keydown", handleKeyDown);
-      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
     };
   }, [toggleFullscreen]);
-
-  const handleScreenClick = () => {
-    if (!audioUnlocked) {
-      unlockAudio();
-    }
-  };
 
   const timeFormatted = currentTime.toLocaleTimeString("en-US", {
     hour: "2-digit",
@@ -118,7 +88,6 @@ export default function QueueDisplay() {
 
   return (
     <div
-      onClick={handleScreenClick}
       className="relative h-screen w-screen overflow-hidden no-scrollbar select-none font-sans flex flex-col bg-[#132c28] text-[#f2f4ef]"
     >
       {/* 1. Facility Header Bar */}
@@ -129,7 +98,7 @@ export default function QueueDisplay() {
           </div>
           <div>
             <h1 className="text-xl lg:text-2xl font-semibold tracking-tight text-[#f2f4ef]">
-              St. Jude Clinic & Wellness Center
+              Clinic Queue Demo
             </h1>
             <p className="text-xs text-[#bad0c7] tracking-wider uppercase font-medium mt-0.5">
               Public Queue Display
@@ -138,27 +107,10 @@ export default function QueueDisplay() {
         </div>
 
         <div className="flex items-center gap-5">
-          {/* Integrated Header Controls (Mute & Fullscreen, auto-fades on idle) */}
-          <div
-            className={`flex items-center gap-2 transition-opacity duration-300 ${
-              controlsVisible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-            }`}
-          >
+          {/* Keep the fullscreen control available to mouse, touch, and keyboard users. */}
+          <div className="flex items-center gap-2">
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setSoundEnabled(!soundEnabled);
-              }}
-              title={soundEnabled ? "Mute announcements" : "Enable sound"}
-              aria-label={soundEnabled ? "Mute audio announcements" : "Enable audio announcements"}
-              className="p-2 rounded-md border border-[#38534b] bg-[#1e443e] text-[#bad0c7] hover:text-[#f2c66d] hover:border-[#42645e] transition-colors cursor-pointer"
-            >
-              {soundEnabled ? <Volume2 className="w-4 h-4 text-[#f2c66d]" /> : <VolumeX className="w-4 h-4 text-[#8ea69c]" />}
-            </button>
-
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
+              onClick={() => {
                 toggleFullscreen();
               }}
               title={isFullscreen ? "Exit fullscreen (F)" : "Enter fullscreen (F)"}
@@ -221,13 +173,17 @@ export default function QueueDisplay() {
             </div>
 
             {/* Prominent Ticket Number in Georgia Serif */}
-            <div className="my-auto text-center py-4 lg:py-6">
+          <div className="my-auto text-center py-4 lg:py-6">
               <p className="text-xs font-bold tracking-[0.2em] text-[#8ea69c] uppercase mb-2">
-                TICKET NUMBER
+                {currentCall ? "TICKET NUMBER" : "READY FOR THE FIRST CALL"}
               </p>
+            {currentCall ? (
               <div className="font-serif text-8xl lg:text-9xl text-[#f2c66d] tracking-tight leading-none">
-                {currentCall?.ticketNumber || "---"}
+                {currentCall.ticketNumber}
               </div>
+            ) : (
+              <p className="text-2xl lg:text-4xl font-medium text-[#f2f4ef]">No tickets have been called.</p>
+            )}
             </div>
 
             {/* Counter Destination Footprint */}
@@ -237,7 +193,7 @@ export default function QueueDisplay() {
                   PLEASE PROCEED TO
                 </span>
                 <span className="text-2xl lg:text-3xl font-semibold tracking-tight text-[#f2f4ef]">
-                  {currentCall?.counterName || "Counter"}
+                  {currentCall?.counterName || "Awaiting call"}
                 </span>
               </div>
 
@@ -247,7 +203,7 @@ export default function QueueDisplay() {
                   Status:
                 </span>
                 <span className="px-3.5 py-1 rounded-md border border-[#38534b] bg-[#1a3832] text-sm lg:text-base font-bold text-[#f2c66d] tracking-wider uppercase">
-                  {currentCall?.status || "Serving"}
+                  {currentCall?.status || "Waiting"}
                 </span>
               </div>
             </div>
@@ -259,10 +215,10 @@ export default function QueueDisplay() {
           <div className="flex-1 rounded-xl p-5 lg:p-6 border border-[#2d4b43] bg-[#1a3832] flex flex-col min-h-0 overflow-hidden">
             <div className="flex items-center justify-between pb-3.5 border-b border-[#2d4b43] mb-3.5 shrink-0">
               <h2 className="text-sm font-bold tracking-[0.12em] text-[#bad0c7] uppercase">
-                Active Counters
+                Recent Calls
               </h2>
               <span className="text-xs text-[#8ea69c]">
-                {recentCalls.length} other active counters
+                {recentCalls.length} more called tickets
               </span>
             </div>
 
@@ -270,7 +226,7 @@ export default function QueueDisplay() {
             <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-2.5 content-start">
               {recentCalls.length === 0 ? (
                 <div className="col-span-full py-12 text-center text-[#8ea69c] text-xs">
-                  No other active counter calls at this moment.
+                  No other called tickets yet.
                 </div>
               ) : (
                 recentCalls.map((item, index) => (
@@ -303,7 +259,7 @@ export default function QueueDisplay() {
         </section>
       </main>
 
-      {/* 3. Bottom Advisory Marquee Ticker */}
+      {/* 3. Generic presentation guidance; clinic-specific content must come from approved configuration. */}
       <footer className="h-11 border-t border-[#2d4b43] bg-[#102421] flex items-center overflow-hidden shrink-0 text-xs">
         <div className="px-5 h-full bg-[#183a34] text-[#f2c66d] font-bold text-[10px] uppercase tracking-[0.12em] flex items-center shrink-0 border-r border-[#2d4b43]">
           Advisories
@@ -313,28 +269,20 @@ export default function QueueDisplay() {
           <div className="whitespace-nowrap flex items-center gap-12 animate-marquee text-[#bad0c7] font-medium">
             <span className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-[#f2c66d]" />
-              Priority lane available for Senior Citizens, Persons with Disability (PWD), and Pregnant patients at Window 1.
+              Local presentation demo · no patient information is used.
             </span>
             <span className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-[#568367]" />
-              Consultation Hours: Monday to Saturday, 8:00 AM – 5:00 PM.
-            </span>
-            <span className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#f2c66d]" />
-              Laboratory Fasting Instructions: Check in with Window 3 for glucose and lipid tests.
-            </span>
-            <span className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#568367]" />
-              Please prepare your valid ID and insurance card prior to approaching the cashier counter.
+              Please watch for your issued ticket number.
             </span>
             {/* Duplicate for seamless marquee continuity */}
             <span className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-[#f2c66d]" />
-              Priority lane available for Senior Citizens, Persons with Disability (PWD), and Pregnant patients at Window 1.
+              Local presentation demo · no patient information is used.
             </span>
             <span className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-[#568367]" />
-              Consultation Hours: Monday to Saturday, 8:00 AM – 5:00 PM.
+              Please watch for your issued ticket number.
             </span>
           </div>
         </div>
