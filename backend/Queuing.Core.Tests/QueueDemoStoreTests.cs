@@ -5,6 +5,34 @@ namespace Queuing.Core.Tests;
 
 public sealed class QueueDemoStoreTests
 {
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("2026-10-20T00:00:00+00:00", true)]
+    [InlineData("2026-10-20T00:00:01+00:00", false)]
+    public void Appointment_is_eligible_only_when_due(string? appointmentAt, bool expected)
+    {
+        var now = DateTimeOffset.Parse("2026-10-20T00:00:00+00:00");
+        DateTimeOffset? appointment = appointmentAt is null ? null : DateTimeOffset.Parse(appointmentAt);
+
+        Assert.Equal(expected, DepartmentQueuePolicy.IsAppointmentEligible(appointment, now));
+    }
+
+    [Theory]
+    [InlineData(DepartmentStepState.Pending, false, false, false)]
+    [InlineData(DepartmentStepState.Called, true, true, true)]
+    [InlineData(DepartmentStepState.Completed, false, false, false)]
+    public void Department_step_transitions_preserve_queue_rules(
+        DepartmentStepState state,
+        bool canReturnToPending,
+        bool canComplete,
+        bool canBeForwarded)
+    {
+        Assert.Equal(state == DepartmentStepState.Pending, DepartmentQueuePolicy.CanCall(state));
+        Assert.Equal(canReturnToPending, DepartmentQueuePolicy.CanReturnToPending(state));
+        Assert.Equal(canComplete, DepartmentQueuePolicy.CanComplete(state));
+        Assert.Equal(canBeForwarded, DepartmentQueuePolicy.CanForward(state));
+    }
+
     private static readonly string[] ServiceIds = ["consultation", "laboratory", "follow-up"];
 
     [Fact]
