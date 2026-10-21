@@ -54,12 +54,15 @@ export default function UsersSection() {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
-    const departmentIds = [...form.elements.departmentIds.selectedOptions].map((option) => option.value);
-    if (data.get("role") === "Staff" && departmentIds.length === 0) {
+    const role = data.get("role");
+    const departmentIds = role === "Staff"
+      ? [...form.elements.departmentIds.selectedOptions].map((option) => option.value)
+      : [];
+    if (role === "Staff" && departmentIds.length === 0) {
       setError("Assign staff to at least one active department.");
       return;
     }
-    const result = await act(() => usersApi.create({ userName: data.get("userName").trim(), role: data.get("role"), departmentIds }), "User provisioned.");
+    const result = await act(() => usersApi.create({ userName: data.get("userName").trim(), role, departmentIds }), "User provisioned.");
     if (result) {
       setCredential(result.oneTimeCredential ?? result.generatedCredential ?? "");
       form.reset();
@@ -71,12 +74,15 @@ export default function UsersSection() {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
-    const departmentIds = [...form.elements.departmentIds.selectedOptions].map((option) => option.value);
-    if (data.get("role") === "Staff" && data.get("active") === "on" && departmentIds.length === 0) {
+    const role = data.get("role");
+    const departmentIds = role === "Staff"
+      ? [...form.elements.departmentIds.selectedOptions].map((option) => option.value)
+      : [];
+    if (role === "Staff" && data.get("active") === "on" && departmentIds.length === 0) {
       setError("Active staff must have at least one department assignment.");
       return;
     }
-    const result = await act(() => usersApi.update(user.id, { role: data.get("role"), departmentIds, active: data.get("active") === "on" }), `Updated ${user.userName}.`);
+    const result = await act(() => usersApi.update(user.id, { role, departmentIds, active: data.get("active") === "on" }), `Updated ${user.userName}.`);
     if (result) setEditingId("");
   }
 
@@ -100,6 +106,7 @@ export default function UsersSection() {
         <label htmlFor="new-user-role">Role</label>
         <select id="new-user-role" name="role" defaultValue="Reception">{roles.map((role) => <option key={role}>{role}</option>)}</select>
         <label htmlFor="new-user-departments">Departments for staff</label>
+        <p className="field-hint">Department assignments apply only to Staff users.</p>
         <select id="new-user-departments" name="departmentIds" multiple size={Math.min(Math.max(departments.filter((item) => item.active).length, 2), 5)}>
           {departments.filter((item) => item.active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select>
@@ -116,6 +123,7 @@ export default function UsersSection() {
             <label htmlFor={`role-${user.id}`}>Role</label>
             <select id={`role-${user.id}`} name="role" defaultValue={user.role}>{roles.map((role) => <option key={role}>{role}</option>)}</select>
             <label htmlFor={`departments-${user.id}`}>Assigned departments</label>
+            <p className="field-hint">Department assignments apply only to Staff users.</p>
             <select id={`departments-${user.id}`} name="departmentIds" multiple size={Math.min(Math.max(departments.filter((item) => item.active).length, 2), 5)} defaultValue={user.departmentIds ?? []}>
               {departments.filter((item) => item.active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>

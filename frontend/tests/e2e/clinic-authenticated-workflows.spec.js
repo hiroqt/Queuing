@@ -156,7 +156,7 @@ test("first sign-in requires a password change before entering a protected works
 });
 
 test("admin can configure each section through the sidebar and sees only the selected section", async ({ page }) => {
-  await mockApi(page, "Admin");
+  const { requests } = await mockApi(page, "Admin");
   await page.goto("/admin");
   await expect(page).toHaveURL(/\/admin\/departments$/);
   await expect(page.getByRole("heading", { name: "Clinic configuration" })).toBeVisible();
@@ -217,6 +217,13 @@ test("admin can configure each section through the sidebar and sees only the sel
   await savedUserForm.getByLabel("Active").uncheck();
   await savedUserForm.getByRole("button", { name: "Save user access" }).click();
   await expect(page.getByText("one-time-secret")).toBeVisible();
+
+  await savedUserRecord.getByRole("button", { name: "Edit access" }).click();
+  const roleChangeForm = savedUserRecord.locator("form");
+  await roleChangeForm.getByLabel("Role").selectOption("Reception");
+  await roleChangeForm.getByRole("button", { name: "Save user access" }).click();
+  const roleChangeRequest = requests.filter((entry) => entry.path === "/admin/users/user-new" && entry.method === "PATCH").at(-1);
+  expect(roleChangeRequest.body).toMatchObject({ role: "Reception", departmentIds: [] });
 
   await page.getByRole("link", { name: "Stations" }).click();
   const refreshedStationRegion = page.getByRole("region", { name: "Stations" });
