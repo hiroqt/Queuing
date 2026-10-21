@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="backend/Queuing.Api/Queuing.Api.csproj" />
+  <Project Path="backend/Queuing.Api.Tests/Queuing.Api.Tests.csproj" />
   <Project Path="backend/Queuing.Core/Queuing.Core.vbproj" />
   <Project Path="backend/Queuing.Core.Tests/Queuing.Core.Tests.csproj" />
 </Solution>

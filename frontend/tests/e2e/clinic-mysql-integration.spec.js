@@ -68,6 +68,17 @@ test("MySQL API and browser preserve visit flow, authorization, and login-free d
   expect(process.env.QUEUING_E2E_ADMIN_USERNAME).toBeTruthy();
   expect(process.env.QUEUING_E2E_ADMIN_PASSWORD).toBeTruthy();
 
+  const localSetup = await request.newContext({ baseURL: apiBaseUrl });
+  const anonymousSession = await localSetup.get("/api/v1/auth/session");
+  expect((await anonymousSession.json()).authenticated).toBe(false);
+  expect((await localSetup.get("/api/v1/admin/services")).status()).toBe(200);
+  const localDepartment = await mutate(localSetup, "/api/v1/admin/departments", "POST", {
+    name: `Local setup ${randomUUID().slice(0, 8)}`,
+  });
+  expect(localDepartment.status()).toBe(201);
+  expect((await localSetup.get(`/api/v1/departments/${randomUUID()}/queue`)).status()).toBe(401);
+  await localSetup.dispose();
+
   const admin = await request.newContext({ baseURL: apiBaseUrl });
   let reception;
   let staff;

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Identity;
@@ -99,6 +100,26 @@ app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseRateLimiter();
 app.UseAuthentication();
+app.Use(async (context, next) =>
+{
+    if (LocalSetupAccess.IsAdminApiPath(context.Request.Path) &&
+        context.User.Identity?.IsAuthenticated != true &&
+        LocalSetupAccess.IsAllowed(
+            app.Configuration.GetValue<bool>("LocalSetup:Enabled"),
+            app.Environment.EnvironmentName,
+            context.Connection.RemoteIpAddress,
+            context.Request.Host.Host))
+    {
+        context.User = new ClaimsPrincipal(new ClaimsIdentity(
+        [
+            new Claim(ClaimTypes.Name, "Local setup"),
+            new Claim(ClaimTypes.Role, QueueRoles.Admin),
+            new Claim("must_change_password", "false")
+        ]));
+    }
+
+    await next(context);
+});
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<QueueHub>("/hubs/displays");
