@@ -68,3 +68,7 @@ Each proposed new capability receives `PRD-CQ-00N` addendum: user problem, bound
 ### Approved forwarding workflow addendum — 2026-10-20
 
 See [SPEC-005](docs/specs/005-forwarding-clinic-queue/spec.md) and [ADR-0002](docs/adr/0002-mysql-and-forwarding-visits.md). Decisions: local MySQL 8.x; `Asia/Manila`; one clinic-wide daily visit code that remains unchanged across departments; manual optional appointment entry per department step; due appointments before FIFO walk-ins; one active department step per visit; Admin, Reception, and department-assigned Staff; admin-created revocable monitors scoped to one department. No patient identity fields or external appointment-system integration.
+
+### Approved service and station configuration addendum — 2026-10-21
+
+See [SPEC-006](docs/specs/006-service-station-admin-config/spec.md). For FR-03, the existing Department is the legacy channel; each Service and physical Station belongs to one Department; Stations may be associated with multiple Services and Staff assigned to that same Department. This slice is configuration-only: queue issuance, forwarding, and calls remain department-scoped until a later approved integration spec.

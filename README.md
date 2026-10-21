@@ -7,9 +7,9 @@ A local clinic queue app with an ASP.NET Core API, a VB.NET workflow library, an
 - **API:** C# ASP.NET Core 10, ASP.NET Identity cookie sessions, EF Core 10, and MySQL 8.x.
 - **Core:** VB.NET transition and appointment eligibility rules in `backend/Queuing.Core/`.
 - **Frontend:** React JavaScript + Vite in `frontend/`; versioned HTTP calls are centralized in `frontend/src/api/client.js`.
-- **Workflow:** Admin configures departments, users, and monitors; Reception issues a visit; assigned staff call, return a no-show to pending, and complete or forward the visit.
+- **Workflow:** Admin configures departments, services, physical stations, staff assignments, and monitors; Reception issues a visit; assigned staff call, return a no-show to pending, and complete or forward the visit.
 - **Displays:** Open `/display/pair` in a new monitor tab and enter its one-time admin-generated code. The monitor receives a revocable device-only cookie and opens `/display` without a staff username or password.
-- **Persistence:** `backend/Queuing.Api/Data/Migrations/` contains the initial schema and queue timestamp precision migrations. The one-time `--bootstrap-admin` command applies migrations and seeds the three initial departments and roles.
+- **Persistence:** `backend/Queuing.Api/Data/Migrations/` contains the initial schema, queue timestamp precision, and service/station configuration migrations. The one-time `--bootstrap-admin` command applies migrations and seeds the three initial departments and roles.
 
 The visit code is clinic-wide and daily, based on `Asia/Manila`; it can repeat on a later date. Department ordering is due appointments first, then FIFO walk-ins. The API is the queue authority. A display receives only its department name and anonymous visit codes. No patient identifiers are collected.
 
@@ -54,7 +54,7 @@ npm --prefix frontend run build
 npm --prefix frontend run test:e2e
 ```
 
-The default Playwright browser tests mock API responses. An opt-in test starts the real API and frontend against an isolated MySQL test database and exercises API authorization, queue operations, browser issue/call, monitor pairing, live updates, and revocation. It creates test departments and visits; run it only against a disposable database whose name ends with `_test`.
+The default Playwright browser tests mock API responses. An opt-in test starts the real API and frontend against an isolated MySQL test database and exercises configuration authorization, service/station assignments, queue operations, browser issue/call, monitor pairing, live updates, and revocation. It creates test departments, services, stations, and visits; run it only against a disposable database whose name ends with `_test`.
 
 From `frontend/`, provide a bootstrapped test administrator and run:
 

@@ -23,4 +23,15 @@
 - Admin provisions Admin, Reception, and department-assigned Staff. Monitors are admin-created, scoped to one department, and activated through revocable pairing.
 - Initial target is local clinic hosting with MySQL 8.x. This does not authorize production exposure or live patient data.
 
+## Resolved for SPEC-006 (2026-10-21)
+
+- Reuse Department for the legacy Channel concept; do not create a second channel/destination entity.
+- Each Service and physical Station belongs to exactly one Department. A Station can handle multiple same-department Services and be assigned to multiple same-department Staff; Staff can use multiple Stations.
+- The first slice adds admin configuration only. Reception service selection and service/station-scoped queue calls are deferred to a follow-up spec.
+
+## Resolve before service-aware queue integration
+
+- Department deactivation currently leaves child Services and Stations active, and child reactivation does not check whether the parent Department is active. Decide whether parent deactivation should cascade to children or whether active-child updates should require an active parent.
+- The Admin UI offers only active Services when adding a Station, while the Admin API permits assigning an inactive same-department Service. Decide whether to reject new inactive-Service links or preserve this as an administrative association for later reactivation.
+
 The provisional assumptions are not production approvals. Do not implement a contested workflow as settled without stakeholder agreement.
