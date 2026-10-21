@@ -45,7 +45,7 @@ Clinic administrators need to configure the services that staff handle and the p
 | Staff | No Service or Station administration. |
 | Paired display / anonymous visitor | No Service or Station administration. |
 
-The API enforces the Admin policy on every configuration route. Cookie-authenticated writes use the existing antiforgery filter. Hiding controls in React is not authorization.
+The API enforces the Admin policy on every configuration route. Cookie-authenticated writes use the existing antiforgery filter. Hiding controls in React is not authorization. The temporary no-login local setup exception is defined by [SPEC-007](../007-local-admin-setup-mode/spec.md); outside its Development + loopback boundary, anonymous configuration requests remain unauthorized.
 
 ## Inputs, output and API contract
 
@@ -65,7 +65,7 @@ All routes are under `/api/v1` and use the existing Problem Details and centrali
 
 Names are trimmed, contain 2–100 characters, and are unique within a Department. Duplicate IDs are rejected. New Services and Stations require an active Department. Every assigned Service and Staff member must belong to the Station's Department. A Staff member must have the Staff role and an existing Department assignment. Service ownership and Station ownership cannot be changed after creation.
 
-Invalid input or cross-department assignment returns `400`; duplicate names return `409`; missing records return `404`; non-Admin access returns `403` (unauthenticated requests return `401`).
+Invalid input or cross-department assignment returns `400`; duplicate names return `409`; missing records return `404`; non-Admin access returns `403` (unauthenticated requests return `401` except for SPEC-007 local setup mode).
 
 ## State and invariants
 
@@ -107,7 +107,7 @@ Invalid input or cross-department assignment returns `400`; duplicate names retu
 1. Given an Admin and active Department, when the Admin creates a Service, then the Service is returned by the Admin API and persists after a fresh API context.
 2. Given an Admin, when the Admin creates a Station with same-department Service and Staff assignments, then those assignments are returned by the Admin API and persist.
 3. Given a Station in one Department, when an Admin assigns a Service or Staff member from another Department, then the API returns `400` and no partial assignment is saved.
-4. Given a non-Admin or anonymous caller, when they call a Service or Station administration route, then the API returns `403` or `401` respectively.
+4. Given a non-Admin or anonymous caller, when they call a Service or Station administration route, then the API returns `403` or `401` respectively, except when the explicit SPEC-007 local Development + loopback mode is active.
 5. Given duplicate same-department names or duplicate assignment IDs, when an Admin submits them, then the API returns a clear conflict/validation error and does not persist duplicates.
 6. Given an assigned Staff user, when an Admin deactivates them, changes their role away from Staff, or removes the Station's Department from their assignments, then incompatible Station-Staff links are removed atomically.
 7. Given existing SPEC-005 visits and DepartmentSteps, when the migration is applied, then queue records and API behavior remain unchanged.

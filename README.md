@@ -41,6 +41,10 @@ npm --prefix frontend ci
 npm --prefix frontend run dev -- --host 127.0.0.1
 ```
 
+The default Vite development session opens the Admin workspace without sign-in so clinic configuration can be prepared before accounts exist. The API permits these Admin configuration requests only when `LocalSetup:Enabled` is true, ASP.NET Core is in `Development`, and both the request Host and remote address are loopback. Keep both servers bound to `127.0.0.1`; Admin changes in this mode have no authenticated actor ID in the audit record.
+
+To use the regular login flow locally, start Vite with `VITE_LOCAL_SETUP_MODE=false` and the API with `LocalSetup__Enabled=false`. A production Vite build does not enable the frontend bypass. See [SPEC-007](docs/specs/007-local-admin-setup-mode/spec.md).
+
 Open the frontend at `http://127.0.0.1:5173`. To pair a monitor, open `http://127.0.0.1:5173/display/pair` in a new tab on that monitor; after activation, leave the tab on the department display. Vite forwards `/api` and `/hubs` to the local API.
 
 ## Checks
@@ -55,6 +59,8 @@ npm --prefix frontend run test:e2e
 ```
 
 The default Playwright browser tests mock API responses. An opt-in test starts the real API and frontend against an isolated MySQL test database and exercises configuration authorization, service/station assignments, queue operations, browser issue/call, monitor pairing, live updates, and revocation. It creates test departments, services, stations, and visits; run it only against a disposable database whose name ends with `_test`.
+
+To exercise the no-login local setup route with mocked API responses, run `QUEUING_LOCAL_SETUP_E2E=1 npm --prefix frontend run test:e2e -- tests/e2e/local-setup-mode.spec.js` after configuring the local API connection string.
 
 From `frontend/`, provide a bootstrapped test administrator and run:
 
@@ -71,6 +77,7 @@ npm run test:e2e -- tests/e2e/clinic-mysql-integration.spec.js
 - `AGENTS.md` — repository boundaries and required engineering workflow.
 - `PRD.md`, `ARD.md`, `SDD.md` — product, architecture, and development notes.
 - `docs/specs/005-forwarding-clinic-queue/` — approved MVP brief, plan, tasks, and acceptance record.
+- `docs/specs/007-local-admin-setup-mode/` — temporary loopback-only no-login setup mode for local development.
 - `docs/adr/0002-mysql-and-forwarding-visits.md` — selected MySQL provider and stable forwarded visit-code decisions.
 - `docs/CODEBASE_MAP.md`, `docs/STRUCTURE.md` — current source map and layout.
 - `skills/project-knowledge/SKILL.md` — default documentation and knowledge retention guidance.
