@@ -103,6 +103,18 @@ a { color: inherit; }
 .nav-link[aria-current="page"] .nav-link-copy small { color: #5f6e6a; }
 .nav-indicator { width: 6px; height: 6px; border-radius: 50%; background: transparent; }
 .nav-link[aria-current="page"] .nav-indicator { background: #bd731a; }
+.admin-nav-group { display: grid; gap: 4px; }
+.admin-nav-toggle { display: flex; min-height: 60px; align-items: center; justify-content: space-between; padding: 9px 12px; border: 0; border-radius: 8px; background: transparent; color: #e8eeea; cursor: pointer; text-align: left; }
+.admin-nav-toggle:hover { background: #28534c; }
+.admin-nav-chevron { width: 18px; color: #f2c66d; font-size: 18px; text-align: center; }
+.admin-subnav { display: grid; gap: 3px; margin-left: 12px; padding-left: 10px; border-left: 1px solid #55766e; }
+.admin-subnav[hidden] { display: none; }
+.admin-subnav-link { display: grid; min-height: 46px; align-content: center; gap: 3px; padding: 6px 10px; border-radius: 6px; color: #e8eeea; text-decoration: none; }
+.admin-subnav-link:hover { background: #28534c; }
+.admin-subnav-link[aria-current="page"] { background: #f4f5f1; color: var(--evergreen); }
+.admin-subnav-link > span { font-size: 12px; font-weight: 650; }
+.admin-subnav-link small { color: #bad0c7; font-size: 10px; }
+.admin-subnav-link[aria-current="page"] small { color: #5f6e6a; }
 .sidebar-foot { display: flex; gap: 10px; align-items: center; margin-top: auto; padding: 15px 12px 2px; border-top: 1px solid #42645e; }
 .sidebar-foot strong { font-size: 12px; font-weight: 600; }
 .sidebar-foot small { margin-top: 4px; color: #bed0c8; font-size: 10px; }
@@ -178,10 +190,10 @@ a { color: inherit; }
 .text-button { margin-top: 18px; padding: 0; border: 0; background: transparent; color: var(--green); cursor: pointer; font-size: 11px; font-weight: 700; }
 .text-button span { padding-left: 5px; }
 
-.admin-layout { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .content-panel .section-heading { margin-bottom: 10px; }
 .settings-list { margin: 0; padding: 0; list-style: none; }
 .settings-list li { display: grid; min-height: 48px; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 9px; border-top: 1px solid #edf0ec; font-size: 12px; }
+.admin-department-list li { grid-template-columns: minmax(0, 1fr) auto auto; }
 .list-index { color: #586963; font-size: 10px; font-variant-numeric: tabular-nums; }
 .enabled-label { padding: 4px 7px; border-radius: 3px; background: #edf3ee; color: #436552; font-size: 9px; font-weight: 700; }
 .admin-form-panel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, .85fr); align-items: end; gap: 20px; }
@@ -257,15 +269,27 @@ form .button { justify-self: start; margin-top: 4px; }
 .receipt-note { margin: 16px 0 0; padding-top: 13px; border-top: 1px dashed #c8c9bd; }
 .topbar-signout { color: var(--evergreen); border-color: var(--line); }
 .topbar-signout:hover { background: #eef2ed; }
-.admin-layout > *, .admin-inline-form, .admin-record { min-width: 0; }
+.admin-inline-form, .admin-record { min-width: 0; }
 .admin-inline-form { margin-top: 22px; padding-top: 17px; border-top: 1px solid var(--line); }
 .admin-inline-form h3 { margin: 0; font-size: 15px; }
 .admin-record-list { display: grid; gap: 14px; }
-.admin-record { display: grid; gap: 8px; padding: 13px 0; border-top: 1px solid #edf0ec; font-size: 12px; }
+.admin-section { margin-top: 0; }
+.admin-section .section-heading { align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+.admin-section-tools { display: flex; align-items: center; gap: 12px; }
+.admin-section-tools .button { margin-top: 0; white-space: nowrap; }
+.admin-record { display: grid; gap: 9px; min-width: 0; padding: 13px 0; border-top: 1px solid #edf0ec; font-size: 12px; }
 .admin-record strong { font-size: 14px; }
 .admin-record > span { color: var(--muted); }
 .admin-record .text-button { justify-self: start; margin-top: 2px; }
 .admin-record select[multiple] { min-height: 68px; padding: 7px 9px; }
+.admin-record-summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px 12px; }
+.admin-record-summary > strong { grid-column: 1; grid-row: 1; }
+.admin-record-summary > span:nth-child(2) { grid-column: 1 / -1; grid-row: 2; color: var(--muted); }
+.admin-record-summary > span:last-child { grid-column: 2; grid-row: 1; }
+.admin-form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.admin-form-actions .text-button { margin: 0; }
+.admin-form-actions .button { margin-top: 0; }
+.admin-section .panel-description a { color: var(--green); font-weight: 700; }
 .checkbox-row { display: flex; align-items: center; gap: 8px; }
 input[type="checkbox"] { width: 18px; min-height: 18px; margin: 0; accent-color: var(--evergreen); }
 .optional-label { color: var(--muted); font-weight: 400; }
@@ -317,7 +341,6 @@ input[type="checkbox"] { width: 18px; min-height: 18px; margin: 0; accent-color:
 }
 
 @media (max-width: 760px) {
-  .admin-layout { grid-template-columns: minmax(0, 1fr); }
   .dashboard-board .board-header { padding-right: 20px; padding-left: 20px; }
   .dashboard-board .board-waiting { padding-right: 20px; padding-left: 20px; }
   .dashboard-board .board-footer { padding-right: 20px; padding-left: 20px; }
@@ -361,12 +384,16 @@ input[type="checkbox"] { width: 18px; min-height: 18px; margin: 0; accent-color:
   .nav-link-copy > span { font-size: 11px; }
   .nav-link-copy small { display: none; }
   .nav-indicator { width: 5px; height: 5px; }
+  .primary-nav.admin-primary-nav { display: block; overflow: visible; margin-top: 12px; padding: 0; }
+  .admin-nav-toggle { width: 100%; min-height: 42px; padding: 8px 10px; }
+  .admin-subnav { margin: 6px 0 0 10px; }
+  .admin-subnav-link { min-height: 40px; }
   .workspace { margin-left: 0; }
   .topbar { min-height: 55px; padding: 0 18px; }
   .page-content { padding: 17px 18px 36px; }
   .page-heading { align-items: flex-start; flex-direction: column; margin: 25px 0 20px; }
   .page-heading h1 { font-size: 30px; }
-  .admin-layout, .ticket-layout { grid-template-columns: minmax(0, 1fr); }
+  .ticket-layout { grid-template-columns: minmax(0, 1fr); }
   .admin-form-panel { grid-template-columns: minmax(0, 1fr); }
   .current-call { min-height: 0; padding: 22px 20px; }
   .current-call h2 { font-size: 58px; }

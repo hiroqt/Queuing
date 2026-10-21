@@ -25,6 +25,7 @@ Queuing/
 │   │   ├── api/           # Central versioned HTTP API client
 │   │   ├── auth/          # Login, session, password-change and route guards
 │   │   └── features/      # Admin, Reception, Department Staff, Display pairing/view
+│   │       └── admin/     # Admin route shell, sidebar nav model, shared UI, and one section per config area
 │   └── tests/             # Node API/role unit tests and Playwright E2E
 ├── docs/                  # code map, specs, ADRs, decisions, templates, runbooks
 └── skills/
@@ -41,7 +42,7 @@ SPEC-005 is implemented in the existing API and React app: persistent MySQL-back
 
 Keep the root `frontend/`, `backend/`, and solution layout. Add structure only alongside the first approved implementation of each capability:
 
-1. **Frontend:** keep each capability in `features/<capability>/`, shared versioned HTTP calls in `src/api/`, and auth state/route guards in `src/auth/`. Keep JavaScript; TypeScript is a separately approved migration.
+1. **Frontend:** keep each capability in `features/<capability>/`; split a capability into section folders when each section owns a distinct route and data workflow, as Admin now does. Keep shared versioned HTTP calls in `src/api/` and auth state/route guards in `src/auth/`. Keep JavaScript; TypeScript is a separately approved migration.
 2. **Backend:** keep HTTP endpoints and persistence in the current API project until a concrete dependency boundary justifies another project. Keep workflow rules independent from ASP.NET Core and EF. Preserve the VB.NET core unless an approved migration changes it.
 3. **Tests:** keep core rules in the existing test project; add a separate integration project only when its database/container lifecycle requires it. Exercise database-specific invariants against MySQL 8.x for SPEC-005.
 4. **Deployment:** add deployment files only after a deployment target and operational requirements are approved.

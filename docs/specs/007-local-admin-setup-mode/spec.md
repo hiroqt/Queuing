@@ -8,7 +8,7 @@ Let a clinic operator open the existing Admin workspace and configure department
 
 ## Approved behavior
 
-- The normal Vite development command opens `/admin` without showing the login page. The UI labels the session as Local setup and does not offer sign-out.
+- The normal Vite development command opens `/admin` without showing the login page. `/admin` redirects to the Departments section at `/admin/departments`; the UI labels the session as Local setup and does not offer sign-out.
 - For anonymous `/api/v1/admin/*` requests only, the API adds temporary Admin role claims that remain unauthenticated when all of these are true: `LocalSetup:Enabled` is true, ASP.NET Core is running in `Development`, the request's remote address is loopback, and the request Host is `localhost` or a loopback IP address. Real authenticated users keep their own claims and audit attribution. The existing anonymous CSRF-token endpoint therefore stays bound to the anonymous request; no other API path receives setup claims.
 - Local setup access does not create an Identity account or password. Admin writes continue through the existing API and antiforgery client. Audit actor ID is empty until a signed-in administrator performs the action.
 - Normal login and authorization remain in effect for production builds, non-Development API environments, non-loopback requests, and queue/reception endpoints.

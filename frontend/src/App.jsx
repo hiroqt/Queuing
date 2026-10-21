@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { Link, NavLink, Navigate, Outlet, Route, Routes } from "react-router";
-import AdminPage from "./features/admin/AdminPage.jsx";
+import AdminLayout from "./features/admin/AdminLayout.jsx";
+import AdminNavigation from "./features/admin/AdminNavigation.jsx";
+import { adminSections } from "./features/admin/adminSections.js";
+import DepartmentsSection from "./features/admin/sections/DepartmentsSection.jsx";
+import ServicesSection from "./features/admin/sections/ServicesSection.jsx";
+import UsersSection from "./features/admin/sections/UsersSection.jsx";
+import StationsSection from "./features/admin/sections/StationsSection.jsx";
+import DisplaysSection from "./features/admin/sections/DisplaysSection.jsx";
 import DepartmentQueuePage from "./features/department/DepartmentQueuePage.jsx";
 import ReceptionPage from "./features/reception/ReceptionPage.jsx";
 import DisplayPairPage from "./features/display/DisplayPairPage.jsx";
@@ -12,14 +19,21 @@ import SignInPage from "./auth/SignInPage.jsx";
 import { homeForRole } from "./auth/roles.js";
 import { RequireRole, RequireSession } from "./auth/RouteGuards.jsx";
 
+const adminSectionRoutes = {
+  departments: <DepartmentsSection />,
+  services: <ServicesSection />,
+  users: <UsersSection />,
+  stations: <StationsSection />,
+  displays: <DisplaysSection />,
+};
+
 function AppLayout() {
   const { user, logout, localSetupMode } = useAuth();
   const [signOutError, setSignOutError] = useState("");
-  const destinations = user.role.toLowerCase() === "admin"
-    ? [{ to: "/admin", label: "Administration", note: "Clinic configuration" }]
-    : user.role.toLowerCase() === "reception"
-      ? [{ to: "/reception", label: "Reception", note: "Issue and reprint visits" }]
-      : [{ to: "/department", label: "Department queue", note: "Assigned work" }];
+  const isAdmin = user.role.toLowerCase() === "admin";
+  const destinations = user.role.toLowerCase() === "reception"
+    ? [{ to: "/reception", label: "Reception", note: "Issue and reprint visits" }]
+    : [{ to: "/department", label: "Department queue", note: "Assigned work" }];
 
   async function signOut() {
     setSignOutError("");
@@ -32,7 +46,9 @@ function AppLayout() {
       <aside className="sidebar">
         <Link className="brand" to={homeForRole(user.role)} aria-label="Clinic queue home"><span className="brand-mark" aria-hidden="true">q</span><span><strong>Queue</strong><small>CLINIC WORKSPACE</small></span></Link>
         <p className="nav-caption">WORKSPACE</p>
-        <nav className="primary-nav" aria-label="Workspace">{destinations.map(({ to, label, note }) => <NavLink className="nav-link" key={to} to={to}><span className="nav-link-copy"><span>{label}</span><small>{note}</small></span><span className="nav-indicator" aria-hidden="true" /></NavLink>)}</nav>
+        <nav className={`primary-nav${isAdmin ? " admin-primary-nav" : ""}`} aria-label="Workspace">
+          {isAdmin ? <AdminNavigation /> : destinations.map(({ to, label, note }) => <NavLink className="nav-link" key={to} to={to}><span className="nav-link-copy"><span>{label}</span><small>{note}</small></span><span className="nav-indicator" aria-hidden="true" /></NavLink>)}
+        </nav>
         <div className="sidebar-foot"><span className="status-dot" aria-hidden="true" /><span><strong>{user.userName}</strong><small>{user.role}</small></span></div>
       </aside>
       <div className="workspace">
@@ -57,7 +73,12 @@ function WorkspaceRoutes() {
         <Route element={<RequireSession />}>
           <Route element={<AppLayout />}>
             <Route index element={<RoleHome />} />
-            <Route element={<RequireRole roles={["admin"]} />}><Route path="admin" element={<AdminPage />} /></Route>
+            <Route element={<RequireRole roles={["admin"]} />}>
+              <Route path="admin" element={<AdminLayout />}>
+                <Route index element={<Navigate to="departments" replace />} />
+                {adminSections.map(({ path }) => <Route key={path} path={path} element={adminSectionRoutes[path]} />)}
+              </Route>
+            </Route>
             <Route element={<RequireRole roles={["reception"]} />}><Route path="reception" element={<ReceptionPage />} /></Route>
             <Route element={<RequireRole roles={["staff"]} />}><Route path="department" element={<DepartmentQueuePage />} /></Route>
             <Route path="*" element={<RoleHome />} />

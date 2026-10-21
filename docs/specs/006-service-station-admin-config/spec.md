@@ -90,6 +90,9 @@ Invalid input or cross-department assignment returns `400`; duplicate names retu
 ## UI and accessibility
 
 - Extend only the authenticated Admin page and use existing panels, inline forms, status messages, buttons, labels, and responsive layout classes.
+- Organize Admin configuration as one collapsible Administration group in the existing workspace sidebar, with direct routes for Departments, Services, Users & access, Stations, and Displays. `/admin` opens Departments; only the selected section's configuration content is rendered.
+- Keep each section's data and mutations local to that section, loading only its records and the related reference data its forms need. Keep one-time credentials and pairing codes visible in the Admin shell after creation, without persisting them in browser storage.
+- The sidebar follows the current evergreen/paper/amber visual system. On narrow screens it remains an expandable vertical menu above the selected content.
 - Provide loading, empty, success, and API error states consistent with the current page.
 - Label Service and Station inputs and multi-select associations. Associate helper text and validation feedback with their controls.
 - Keep controls keyboard-operable and preserve visible focus; no color-only indication of active state.
@@ -112,6 +115,7 @@ Invalid input or cross-department assignment returns `400`; duplicate names retu
 6. Given an assigned Staff user, when an Admin deactivates them, changes their role away from Staff, or removes the Station's Department from their assignments, then incompatible Station-Staff links are removed atomically.
 7. Given existing SPEC-005 visits and DepartmentSteps, when the migration is applied, then queue records and API behavior remain unchanged.
 8. Given an Admin in the existing React workspace, when they create and update Services and Stations, then the page shows saved configuration, associated department/services/staff, and understandable errors without a design-system change.
+9. Given an Admin opening `/admin`, when they choose an Administration section, then only that section's configuration is shown at a direct route that supports refresh and browser history; the existing local setup and authenticated Admin access paths continue to work.
 
 ## Open decisions and signoff
 
