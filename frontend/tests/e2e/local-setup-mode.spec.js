@@ -14,7 +14,7 @@ test("local setup opens the Admin workspace without requesting a login", async (
 
   await page.goto("/");
 
-  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page).toHaveURL(/\/admin\/departments$/);
   await expect(page.getByRole("heading", { name: "Clinic configuration" })).toBeVisible();
   await expect(page.getByRole("status").filter({ hasText: "Local setup mode" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Sign in" })).toHaveCount(0);

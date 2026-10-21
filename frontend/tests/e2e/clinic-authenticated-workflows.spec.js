@@ -155,43 +155,79 @@ test("first sign-in requires a password change before entering a protected works
   expect(requests.find((entry) => entry.path === "/auth/change-password").body).toEqual({ currentPassword: "temporary-password", newPassword: "private-password" });
 });
 
-test("admin can add a department and provision a user without exposing a password field", async ({ page }) => {
+test("admin can configure each section through the sidebar and sees only the selected section", async ({ page }) => {
   await mockApi(page, "Admin");
   await page.goto("/admin");
+  await expect(page).toHaveURL(/\/admin\/departments$/);
   await expect(page.getByRole("heading", { name: "Clinic configuration" })).toBeVisible();
-  await page.getByLabel("Add department").fill("Ultrasound");
+  await expect(page.getByRole("region", { name: "Departments" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Services" })).toHaveCount(0);
+  const adminMenu = page.getByRole("button", { name: /Administration/ });
+  await expect(adminMenu).toHaveAttribute("aria-expanded", "true");
+  await adminMenu.click();
+  await expect(adminMenu).toHaveAttribute("aria-expanded", "false");
+  await adminMenu.click();
   await page.getByRole("button", { name: "Add department" }).click();
+  await page.getByLabel("Department name").fill("Ultrasound");
+  await page.getByRole("button", { name: "Save department" }).click();
   await expect(page.getByRole("region", { name: "Departments" }).getByText("Ultrasound", { exact: true })).toBeVisible();
+
+  await page.getByRole("link", { name: /^Services\b/ }).click();
+  await expect(page).toHaveURL(/\/admin\/services$/);
+  await expect(page.getByRole("region", { name: "Departments" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Add service" }).click();
+  await page.getByLabel("Service name").fill("X-ray Imaging");
+  await page.getByLabel("Service department").selectOption("dept-xray");
+  await page.getByRole("button", { name: "Save service" }).click();
+  await expect(page.getByRole("region", { name: "Services" }).getByText("X-ray Imaging", { exact: true })).toBeVisible();
+
+  await page.getByRole("link", { name: "Users & access" }).click();
+  await expect(page).toHaveURL(/\/admin\/users$/);
+  await expect(page.getByRole("region", { name: "Services" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Add user" }).click();
   await page.getByLabel("Username", { exact: true }).fill("new-staff");
   await page.getByLabel("Role", { exact: true }).last().selectOption("Staff");
   await page.getByLabel("Departments for staff").selectOption(["dept-xray"]);
   await page.getByRole("button", { name: "Provision user" }).click();
   await expect(page.getByText("one-time-secret")).toBeVisible();
   await expect(page.getByLabel("Password")).toHaveCount(0);
-  await page.getByLabel("Service name").fill("X-ray Imaging");
-  await page.getByLabel("Service department").selectOption("dept-xray");
-  await page.getByRole("button", { name: "Add service" }).click();
-  await expect(page.getByRole("region", { name: "Services" }).getByText("X-ray Imaging", { exact: true })).toBeVisible();
+
+  await page.getByRole("link", { name: "Stations" }).click();
+  await expect(page).toHaveURL(/\/admin\/stations$/);
+  await page.getByRole("button", { name: "Add station" }).click();
   await page.getByLabel("Station name").fill("Window 1");
   await page.getByLabel("Station department").selectOption("dept-xray");
   await page.getByLabel("Services handled").selectOption("service-new");
   await page.getByLabel("Assigned staff").selectOption("user-new");
-  await page.getByRole("button", { name: "Add station" }).click();
+  await page.getByRole("button", { name: "Save station" }).click();
   const stationRegion = page.getByRole("region", { name: "Stations" });
   await expect(stationRegion.getByText("Window 1", { exact: true })).toBeVisible();
   await expect(stationRegion.getByText("X-ray Imaging", { exact: true })).toBeVisible();
   await expect(stationRegion.getByText("new-staff", { exact: true })).toBeVisible();
-  const savedStationForm = stationRegion.locator("form.admin-record");
+  const savedStationForm = stationRegion.locator(".admin-record form");
+  await stationRegion.getByRole("button", { name: "Edit station" }).click();
   await savedStationForm.getByLabel("Station name").fill("Window 1 Front Desk");
   await savedStationForm.getByRole("button", { name: "Save station" }).click();
   await expect(stationRegion.getByText("Window 1 Front Desk", { exact: true })).toBeVisible();
-  const savedUserForm = page.getByRole("region", { name: "Users" }).locator("form.admin-record").filter({ hasText: "new-staff" });
+
+  await page.getByRole("link", { name: "Users & access" }).click();
+  const savedUserRecord = page.getByRole("region", { name: "Users & access" }).locator(".admin-record").filter({ hasText: "new-staff" });
+  await savedUserRecord.getByRole("button", { name: "Edit access" }).click();
+  const savedUserForm = savedUserRecord.locator("form");
   await savedUserForm.getByLabel("Active").uncheck();
   await savedUserForm.getByRole("button", { name: "Save user access" }).click();
-  await expect(savedStationForm.getByLabel("Assigned staff").locator('option[value="user-new"]')).toHaveCount(0);
+  await expect(page.getByText("one-time-secret")).toBeVisible();
+
+  await page.getByRole("link", { name: "Stations" }).click();
+  const refreshedStationRegion = page.getByRole("region", { name: "Stations" });
+  await expect(refreshedStationRegion.getByText("No staff assigned")).toBeVisible();
+
+  await page.getByRole("link", { name: "Displays" }).click();
+  await expect(page).toHaveURL(/\/admin\/displays$/);
+  await page.getByRole("button", { name: "Add monitor" }).click();
   await page.getByLabel("Monitor name").fill("X-ray Waiting Room");
   await page.getByLabel("Assigned department", { exact: true }).selectOption("dept-xray");
-  await page.getByRole("button", { name: "Create monitor" }).click();
+  await page.getByRole("button", { name: "Save monitor" }).click();
   await expect(page.getByText("X-ray Waiting Room", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Create pairing code" }).click();
   await expect(page.getByText("PAIR-1234")).toBeVisible();
@@ -199,6 +235,14 @@ test("admin can add a department and provision a user without exposing a passwor
   await expect(page.getByRole("link", { name: "Open pairing page in a new tab" })).toHaveAttribute("href", "/display/pair");
   await page.getByRole("button", { name: "Revoke" }).click();
   await expect(page.getByText("Revoked", { exact: true })).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/admin\/stations$/);
+  await expect(page.getByRole("region", { name: "Stations" })).toBeVisible();
+  await page.goto("/admin/services");
+  await page.reload();
+  await expect(page).toHaveURL(/\/admin\/services$/);
+  await expect(page.getByRole("region", { name: "Services" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Stations" })).toHaveCount(0);
 });
 
 test("reception issues an Asia/Manila appointment, prints its stable code, and can look it up", async ({ page }) => {
