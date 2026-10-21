@@ -75,6 +75,8 @@ test("MySQL API and browser preserve visit flow, authorization, and login-free d
   const users = [];
   let displayId;
   let browserDisplayId;
+  let stationId;
+  const serviceIds = [];
   let device;
   let browserStaffContext;
   let displayBrowserContext;
@@ -94,14 +96,81 @@ test("MySQL API and browser preserve visit flow, authorization, and login-free d
     expect(xray?.active).toBe(true);
     expect(ecg?.active).toBe(true);
 
+    const createService = async (name, departmentId) => {
+      const response = await mutate(admin, "/api/v1/admin/services", "POST", { name, departmentId });
+      expect(response.status()).toBe(201);
+      return response.json();
+    };
+    const xrayService = await createService(`X-ray imaging ${suffix}`, xray.id);
+    const ecgService = await createService(`ECG test ${suffix}`, ecg.id);
+    serviceIds.push(xrayService.id, ecgService.id);
+    expect((await mutate(admin, "/api/v1/admin/services", "POST", {
+      name: `X-ray imaging ${suffix}`,
+      departmentId: xray.id,
+    })).status()).toBe(409);
+    const concurrentServiceAttempts = await Promise.all([1, 2].map(() => mutate(admin, "/api/v1/admin/services", "POST", {
+      name: `Concurrent service ${suffix}`,
+      departmentId: xray.id,
+    })));
+    const concurrentServiceResults = await Promise.all(concurrentServiceAttempts.map(async (response) => ({ status: response.status(), body: await response.text() })));
+    expect(concurrentServiceResults.map((result) => result.status).sort()).toEqual([201, 409]);
+    serviceIds.push(JSON.parse(concurrentServiceResults.find((result) => result.status === 201).body).id);
+
     const receptionUser = await provisionUser(admin, `reception-${suffix}`, "Reception", []);
     const staffUser = await provisionUser(admin, `staff-${suffix}`, "Staff", [xray.id, ecg.id]);
     const ecgOnlyUser = await provisionUser(admin, `ecg-staff-${suffix}`, "Staff", [ecg.id]);
+    const stationOnlyStaff = await provisionUser(admin, `station-staff-${suffix}`, "Staff", [xray.id]);
     users.push(
       { ...receptionUser, role: "Reception", departmentIds: [] },
       { ...staffUser, role: "Staff", departmentIds: [xray.id, ecg.id] },
       { ...ecgOnlyUser, role: "Staff", departmentIds: [ecg.id] },
+      { ...stationOnlyStaff, role: "Staff", departmentIds: [xray.id] },
     );
+
+    const stationResponse = await mutate(admin, "/api/v1/admin/stations", "POST", {
+      name: `X-ray Window ${suffix}`,
+      departmentId: xray.id,
+      serviceIds: [xrayService.id],
+      staffUserIds: [staffUser.id, stationOnlyStaff.id],
+    });
+    const stationBody = await stationResponse.text();
+    expect(stationResponse.status(), `Create station returned ${stationResponse.status()}: ${stationBody}`).toBe(201);
+    const station = JSON.parse(stationBody);
+    stationId = station.id;
+    expect(station.serviceIds).toEqual([xrayService.id]);
+    expect(station.staffUserIds).toEqual(expect.arrayContaining([staffUser.id, stationOnlyStaff.id]));
+    expect((await mutate(admin, `/api/v1/admin/stations/${stationId}`, "PATCH", {
+      serviceIds: [ecgService.id],
+    })).status()).toBe(400);
+    expect((await mutate(admin, `/api/v1/admin/stations/${stationId}`, "PATCH", {
+      staffUserIds: [ecgOnlyUser.id],
+    })).status()).toBe(400);
+    expect((await mutate(admin, `/api/v1/admin/stations/${stationId}`, "PATCH", {
+      serviceIds: [xrayService.id, xrayService.id],
+    })).status()).toBe(400);
+    const concurrentStationAttempts = await Promise.all([1, 2].map(() => mutate(admin, "/api/v1/admin/stations", "POST", {
+      name: `Concurrent station ${suffix}`,
+      departmentId: xray.id,
+      serviceIds: [xrayService.id],
+      staffUserIds: [],
+    })));
+    const concurrentStationResults = await Promise.all(concurrentStationAttempts.map(async (response) => ({ status: response.status(), body: await response.text() })));
+    expect(concurrentStationResults.map((result) => result.status).sort()).toEqual([201, 409]);
+    const concurrentStation = JSON.parse(concurrentStationResults.find((result) => result.status === 201).body);
+    await mutate(admin, `/api/v1/admin/stations/${concurrentStation.id}`, "PATCH", { active: false });
+
+    const deactivateStationStaff = await mutate(admin, `/api/v1/admin/users/${stationOnlyStaff.id}`, "PATCH", {
+      role: "Staff",
+      departmentIds: [xray.id],
+      active: false,
+    });
+    expect(deactivateStationStaff.status()).toBe(200);
+    const persistedStations = await admin.get("/api/v1/admin/stations");
+    const persistedStationsBody = await persistedStations.text();
+    expect(persistedStations.status(), `List stations returned ${persistedStations.status()}: ${persistedStationsBody}`).toBe(200);
+    const persistedStation = JSON.parse(persistedStationsBody).find((row) => row.id === stationId);
+    expect(persistedStation.serviceIds).toEqual([xrayService.id]);
+    expect(persistedStation.staffUserIds).toEqual([staffUser.id]);
 
     const monitorResponse = await mutate(admin, "/api/v1/admin/displays", "POST", {
       name: `X-ray test monitor ${suffix}`,
@@ -124,6 +193,8 @@ test("MySQL API and browser preserve visit flow, authorization, and login-free d
     staff = staffSession.context;
     otherStaff = otherStaffSession.context;
     expect((await otherStaff.get(`/api/v1/departments/${xray.id}/queue`)).status()).toBe(403);
+    expect((await otherStaff.get("/api/v1/admin/services")).status()).toBe(403);
+    expect((await otherStaff.get("/api/v1/admin/stations")).status()).toBe(403);
 
     const issue = async (departmentId, appointmentAtLocal, key = randomUUID()) => {
       const response = await mutate(reception, "/api/v1/visits", "POST", {
@@ -232,6 +303,7 @@ test("MySQL API and browser preserve visit flow, authorization, and login-free d
     await staffPage.getByLabel("Password").fill(staffSession.password);
     await staffPage.getByRole("button", { name: "Sign in" }).click();
     await expect(staffPage).toHaveURL(/\/department$/);
+    await staffPage.getByLabel("Your department").selectOption(xray.id);
     await expect(staffPage.getByRole("row", { name: new RegExp(browserVisitCode) })).toBeVisible();
     await staffPage.getByRole("button", { name: "Call next" }).click();
     await expect(staffPage.getByRole("status").filter({ hasText: `Now calling ${browserVisitCode}` })).toBeVisible();
@@ -245,6 +317,8 @@ test("MySQL API and browser preserve visit flow, authorization, and login-free d
     expect(revoke.status()).toBe(200);
     expect([401, 403]).toContain((await device.get("/api/v1/displays/me/snapshot")).status());
   } finally {
+    if (stationId) await mutate(admin, `/api/v1/admin/stations/${stationId}`, "PATCH", { active: false }).catch(() => {});
+    for (const serviceId of serviceIds) await mutate(admin, `/api/v1/admin/services/${serviceId}`, "PATCH", { active: false }).catch(() => {});
     if (displayId) await mutate(admin, `/api/v1/admin/displays/${displayId}`, "PATCH", { active: false }).catch(() => {});
     if (browserDisplayId) await mutate(admin, `/api/v1/admin/displays/${browserDisplayId}`, "PATCH", { active: false }).catch(() => {});
     for (const user of users) {

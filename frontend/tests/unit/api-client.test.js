@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { api, authApi, clearRequestToken, displaysApi, queueApi, refreshRequestToken } from "../../src/api/client.js";
+import { api, authApi, clearRequestToken, displaysApi, queueApi, refreshRequestToken, servicesApi, stationsApi } from "../../src/api/client.js";
 
 test("cookie-authenticated mutations obtain and send the antiforgery token", async () => {
   const originalFetch = globalThis.fetch;
@@ -104,6 +104,34 @@ test("queue transitions carry idempotency keys and only forward a supplied local
     });
     assert.equal(requests[3].options.headers.get("Idempotency-Key"), "retry-key-3");
     assert.deepEqual(JSON.parse(requests[3].options.body), {});
+  } finally {
+    globalThis.fetch = originalFetch;
+    clearRequestToken();
+  }
+});
+
+test("admin service and station operations use the shared CSRF-aware API client", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (input, options) => {
+    requests.push({ url: String(input), options });
+    return requests.length === 1
+      ? new Response(JSON.stringify({ requestToken: "admin-config-token" }), { status: 200 })
+      : new Response(JSON.stringify({ id: "config-1" }), { status: 201 });
+  };
+  clearRequestToken();
+
+  try {
+    await servicesApi.create({ name: "X-ray", departmentId: "dept-xray" });
+    await stationsApi.update("station-1", { serviceIds: ["service-1"], staffUserIds: ["staff-1"] });
+
+    assert.equal(requests[1].url, "/api/v1/admin/services");
+    assert.equal(requests[1].options.headers.get("X-CSRF-TOKEN"), "admin-config-token");
+    assert.deepEqual(JSON.parse(requests[1].options.body), { name: "X-ray", departmentId: "dept-xray" });
+    assert.equal(requests[2].url, "/api/v1/admin/stations/station-1");
+    assert.equal(requests[2].options.method, "PATCH");
+    assert.equal(requests[2].options.headers.get("X-CSRF-TOKEN"), "admin-config-token");
+    assert.deepEqual(JSON.parse(requests[2].options.body), { serviceIds: ["service-1"], staffUserIds: ["staff-1"] });
   } finally {
     globalThis.fetch = originalFetch;
     clearRequestToken();

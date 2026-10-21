@@ -43,7 +43,7 @@ Disallowed until new approved spec: health records, patient PHI, appointment sch
 
 ## Security and patient privacy
 - Secure HttpOnly cookies on same-origin production deployment; CSRF protection for cookie-authenticated mutations; TLS; controlled CORS in development; never put session secrets in localStorage.
-- Identity + policy/resource-based authorization: staff must be assigned to the counter they operate; admin operations require admin policy. UI role checks are cosmetic only.
+- Identity + policy/resource-based authorization: staff must be assigned to the department and station they operate; admin operations require admin policy. SPEC-006 establishes department-owned station/service assignments, but queue commands remain department-scoped until a follow-up spec. UI role checks are cosmetic only.
 - Least data to public screens: anonymous queue number, counter/service, status only. No patient names or clinical information.
 - Validation on API and DB; parametrized EF queries; output encoding; no dangerouslySetInnerHTML for config text; sanitize branding inputs.
 - Redact PII/credentials from logs; audit privileged/config and queue mutations with actor, time, target and correlation ID; no raw password logging.

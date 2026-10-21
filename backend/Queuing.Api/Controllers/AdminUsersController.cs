@@ -107,9 +107,16 @@ public sealed class AdminUsersController(
         var added = await users.AddToRoleAsync(user, request.Role);
         if (!added.Succeeded) return Problem(statusCode: StatusCodes.Status500InternalServerError, title: "Could not update user roles.");
 
+        HashSet<Guid> retainedDepartmentIds = request.Role == QueueRoles.Staff && request.Active
+            ? request.DepartmentIds.ToHashSet()
+            : [];
+        var stationAssignments = await db.StationStaff.Where(item => item.UserId == id).ToListAsync(cancellationToken);
+        db.StationStaff.RemoveRange(stationAssignments.Where(item => !retainedDepartmentIds.Contains(item.DepartmentId)));
+
         var currentAssignments = await db.UserDepartments.Where(item => item.UserId == id).ToListAsync(cancellationToken);
-        db.UserDepartments.RemoveRange(currentAssignments);
-        AddAssignments(id, request.DepartmentIds);
+        var requestedDepartmentIds = request.DepartmentIds.ToHashSet();
+        db.UserDepartments.RemoveRange(currentAssignments.Where(item => !requestedDepartmentIds.Contains(item.DepartmentId)));
+        AddAssignments(id, requestedDepartmentIds.Except(currentAssignments.Select(item => item.DepartmentId)));
         user.Active = request.Active;
         user.DisplayName = request.DisplayName?.Trim() ?? user.DisplayName;
         var stampUpdated = await users.UpdateSecurityStampAsync(user);

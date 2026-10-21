@@ -15,6 +15,10 @@ public sealed class QueueDbContext(DbContextOptions<QueueDbContext> options)
 
     public DbSet<Department> Departments => Set<Department>();
     public DbSet<UserDepartment> UserDepartments => Set<UserDepartment>();
+    public DbSet<ClinicService> Services => Set<ClinicService>();
+    public DbSet<Station> Stations => Set<Station>();
+    public DbSet<StationService> StationServices => Set<StationService>();
+    public DbSet<StationStaff> StationStaff => Set<StationStaff>();
     public DbSet<Visit> Visits => Set<Visit>();
     public DbSet<DepartmentStep> DepartmentSteps => Set<DepartmentStep>();
     public DbSet<DailySequence> DailySequences => Set<DailySequence>();
@@ -51,6 +55,57 @@ public sealed class QueueDbContext(DbContextOptions<QueueDbContext> options)
                 .WithMany()
                 .HasForeignKey(assignment => assignment.DepartmentId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<ClinicService>(entity =>
+        {
+            entity.HasAlternateKey(service => new { service.DepartmentId, service.Id });
+            entity.Property(service => service.Name).HasMaxLength(100).IsRequired();
+            entity.HasIndex(service => new { service.DepartmentId, service.Name }).IsUnique();
+            entity.HasOne(service => service.Department)
+                .WithMany()
+                .HasForeignKey(service => service.DepartmentId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<Station>(entity =>
+        {
+            entity.HasAlternateKey(station => new { station.DepartmentId, station.Id });
+            entity.Property(station => station.Name).HasMaxLength(100).IsRequired();
+            entity.HasIndex(station => new { station.DepartmentId, station.Name }).IsUnique();
+            entity.HasOne(station => station.Department)
+                .WithMany()
+                .HasForeignKey(station => station.DepartmentId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<StationService>(entity =>
+        {
+            entity.HasKey(assignment => new { assignment.DepartmentId, assignment.StationId, assignment.ServiceId });
+            entity.HasOne(assignment => assignment.Station)
+                .WithMany(station => station.ServiceAssignments)
+                .HasForeignKey(assignment => new { assignment.DepartmentId, assignment.StationId })
+                .HasPrincipalKey(station => new { station.DepartmentId, station.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(assignment => assignment.Service)
+                .WithMany()
+                .HasForeignKey(assignment => new { assignment.DepartmentId, assignment.ServiceId })
+                .HasPrincipalKey(service => new { service.DepartmentId, service.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<StationStaff>(entity =>
+        {
+            entity.HasKey(assignment => new { assignment.DepartmentId, assignment.StationId, assignment.UserId });
+            entity.HasOne(assignment => assignment.Station)
+                .WithMany(station => station.StaffAssignments)
+                .HasForeignKey(assignment => new { assignment.DepartmentId, assignment.StationId })
+                .HasPrincipalKey(station => new { station.DepartmentId, station.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(assignment => assignment.UserDepartment)
+                .WithMany(userDepartment => userDepartment.StationAssignments)
+                .HasForeignKey(assignment => new { assignment.UserId, assignment.DepartmentId })
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<DailySequence>(entity =>
@@ -147,6 +202,47 @@ public sealed class UserDepartment
     public QueueUser User { get; set; } = null!;
     public Guid DepartmentId { get; set; }
     public Department Department { get; set; } = null!;
+    public ICollection<StationStaff> StationAssignments { get; } = new List<StationStaff>();
+}
+
+public sealed class ClinicService
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid DepartmentId { get; set; }
+    public Department Department { get; set; } = null!;
+    public string Name { get; set; } = "";
+    public bool Active { get; set; } = true;
+    public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+}
+
+public sealed class Station
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid DepartmentId { get; set; }
+    public Department Department { get; set; } = null!;
+    public string Name { get; set; } = "";
+    public bool Active { get; set; } = true;
+    public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public ICollection<StationService> ServiceAssignments { get; } = new List<StationService>();
+    public ICollection<StationStaff> StaffAssignments { get; } = new List<StationStaff>();
+}
+
+public sealed class StationService
+{
+    public Guid DepartmentId { get; set; }
+    public Guid StationId { get; set; }
+    public Station Station { get; set; } = null!;
+    public Guid ServiceId { get; set; }
+    public ClinicService Service { get; set; } = null!;
+}
+
+public sealed class StationStaff
+{
+    public Guid DepartmentId { get; set; }
+    public Guid StationId { get; set; }
+    public Station Station { get; set; } = null!;
+    public Guid UserId { get; set; }
+    public UserDepartment UserDepartment { get; set; } = null!;
 }
 
 public sealed class DailySequence

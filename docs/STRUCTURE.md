@@ -11,7 +11,7 @@ Queuing/
 ├── backend/
 │   ├── Queuing.Api/       # C# ASP.NET Core API, Identity, EF Core/MySQL persistence
 │   │   ├── Auth/          # Bootstrap, claims and department scope
-│   │   ├── Controllers/   # Auth, admin configuration, visits, queues, displays
+│   │   ├── Controllers/   # Auth, admin department/user/service/station/display config, visits, queues
 │   │   ├── Data/          # DbContext, design-time factory, health check, migrations
 │   │   ├── Hubs/          # Read-only scoped SignalR notifications
 │   │   └── Services/      # Persisted outbox dispatcher
@@ -35,7 +35,7 @@ Queuing/
 
 The projects target .NET 10. The earlier SPEC-003/SPEC-004 in-memory presentation slices are retained as historical specifications/core tests; their old API routes were removed when SPEC-005 took over the application API.
 
-SPEC-005 is implemented in the existing API and React app: persistent MySQL-backed visits and dynamic departments/users/displays. The initial schema and timestamp-precision migrations, one-time admin bootstrap, and covered MySQL 8.4 API/browser workflow have passed locally. Date rollover, concurrent issue/forward races, recovery, and production readiness remain unverified. `docs/adr/0002-mysql-and-forwarding-visits.md` supersedes ADR-0001's proposed PostgreSQL choice for this slice.
+SPEC-005 is implemented in the existing API and React app: persistent MySQL-backed visits and dynamic departments/users/displays. SPEC-006 adds dynamic Services, physical Stations, and same-department Staff/Service assignments to the existing Admin page. Service/Station configuration does not yet affect issue, forwarding, or call behavior. The initial schema and timestamp-precision migrations, one-time admin bootstrap, and covered MySQL 8.4 API/browser workflow have passed locally. Date rollover, concurrent issue/forward races, recovery, and production readiness remain unverified. `docs/adr/0002-mysql-and-forwarding-visits.md` supersedes ADR-0001's proposed PostgreSQL choice for this slice.
 
 ## Growth path
 
