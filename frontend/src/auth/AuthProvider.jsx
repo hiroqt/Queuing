@@ -2,10 +2,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { authApi, clearRequestToken } from "../api/client.js";
 import { AuthContext } from "./AuthContext.js";
 
+const localSetupMode = import.meta.env.DEV && import.meta.env.VITE_LOCAL_SETUP_MODE === true;
+const localSetupUser = { userName: "Local setup", role: "Admin", departmentIds: [], mustChangePassword: false };
+
 export function AuthProvider({ children }) {
-  const [session, setSession] = useState({ loading: true, authenticated: false, user: null, error: "" });
+  const [session, setSession] = useState(() => localSetupMode
+    ? { loading: false, authenticated: true, user: localSetupUser, error: "" }
+    : { loading: true, authenticated: false, user: null, error: "" });
 
   const refresh = useCallback(async (signal) => {
+    if (localSetupMode) return localSetupUser;
     try {
       const result = await authApi.session(signal);
       const user = result.authenticated ? {
@@ -23,6 +29,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    if (localSetupMode) return undefined;
     const controller = new AbortController();
     Promise.resolve().then(() => refresh(controller.signal));
     return () => controller.abort();
@@ -44,6 +51,6 @@ export function AuthProvider({ children }) {
     setSession({ loading: false, authenticated: false, user: null, error: "" });
   }, []);
 
-  const value = useMemo(() => ({ ...session, login, logout, changePassword, refresh }), [session, login, logout, changePassword, refresh]);
+  const value = useMemo(() => ({ ...session, localSetupMode, login, logout, changePassword, refresh }), [session, login, logout, changePassword, refresh]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

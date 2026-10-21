@@ -13,7 +13,7 @@ import { homeForRole } from "./auth/roles.js";
 import { RequireRole, RequireSession } from "./auth/RouteGuards.jsx";
 
 function AppLayout() {
-  const { user, logout } = useAuth();
+  const { user, logout, localSetupMode } = useAuth();
   const [signOutError, setSignOutError] = useState("");
   const destinations = user.role.toLowerCase() === "admin"
     ? [{ to: "/admin", label: "Administration", note: "Clinic configuration" }]
@@ -36,7 +36,7 @@ function AppLayout() {
         <div className="sidebar-foot"><span className="status-dot" aria-hidden="true" /><span><strong>{user.userName}</strong><small>{user.role}</small></span></div>
       </aside>
       <div className="workspace">
-        <header className="topbar"><div className="breadcrumb"><span>Clinic queue</span><span aria-hidden="true">/</span><strong>{user.role}</strong></div>{signOutError && <span role="alert">{signOutError}</span>}<button className="button button-quiet topbar-signout" type="button" onClick={signOut}>Sign out</button></header>
+        <header className="topbar"><div className="breadcrumb"><span>Clinic queue</span><span aria-hidden="true">/</span><strong>{user.role}</strong></div>{signOutError && <span role="alert">{signOutError}</span>}{localSetupMode ? <span className="surface-tag" role="status">Local setup mode · login disabled</span> : <button className="button button-quiet topbar-signout" type="button" onClick={signOut}>Sign out</button>}</header>
         <main id="main-content" className="page-content"><Outlet /></main>
       </div>
     </div>

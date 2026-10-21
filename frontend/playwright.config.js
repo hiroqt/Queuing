@@ -26,6 +26,9 @@ export default defineConfig({
       url: "http://127.0.0.1:4173",
       reuseExistingServer: false,
       timeout: 30_000,
+      env: {
+        VITE_LOCAL_SETUP_MODE: process.env.QUEUING_LOCAL_SETUP_E2E === "1" ? "true" : "false",
+      },
     },
   ],
 });
