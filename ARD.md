@@ -57,6 +57,7 @@ For SPEC-005, a visit has one stable code and a current department step. A step 
 
 ## 9. Auth and trust boundaries
 - Same-origin production, secure HttpOnly session cookies, SameSite according to deployment, anti-forgery token required for all state-changing cookie-auth requests, HTTPS+HSTS, session timeout/logout/revocation, password/MFA policy based on risk.
+- Local development has the narrowly scoped SPEC-007 exception: no-login Admin configuration is allowed only when explicitly enabled in Development and both request Host and remote address are loopback. It does not change production authentication or non-admin API authorization.
 - Admin and Staff policies plus **resource-based** checks on counter/service/department assignment. Identity role ≠ automatic access to every queue.
 - Public display has revocable, scope-limited device credential established by pairing with admin approval, no staff session reuse; broadcast only safe snapshot deltas; SignalR groups are routing only, not an authorization mechanism.
 - Rate limiting, payload size limits, validation, safe error messages and non-sensitive structured logs. Threat-model credential theft, display impersonation, replay, XSS, CSRF, race conditions and excessive requests.
