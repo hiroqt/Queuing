@@ -32,7 +32,10 @@ This map describes the current SPEC-005 queue, SPEC-006 admin configuration, and
 | `frontend/src/App.jsx` | Public display pairing/view routes and authenticated workspace route tree. |
 | `frontend/src/api/client.js` | Central same-origin `/api/v1` fetch client, antiforgery token, session, department/user/service/station/display admin, visit, and queue API methods. |
 | `frontend/src/auth/` | Login, session provider, role guards, forced password change, and the Vite-only local setup session. |
-| `frontend/src/features/admin/AdminPage.jsx` | Department, Service, Station/Staff assignment, user, and monitor configuration. |
+| `frontend/src/features/admin/AdminLayout.jsx` | Admin workspace heading and shared one-time credential/pairing-code notices; hosts the selected configuration section. |
+| `frontend/src/features/admin/AdminNavigation.jsx`, `adminSections.js` | Collapsible Admin sidebar group and the direct routes for Departments, Services, Users & access, Stations, and Displays. |
+| `frontend/src/features/admin/sections/` | One React page per admin configuration area; each loads only its records and related form choices from the shared API client. |
+| `frontend/src/features/admin/components/` | Shared section heading and API feedback UI used by admin pages. |
 | `frontend/src/features/reception/ReceptionPage.jsx` | Visit issue, anonymous receipt, browser print, and lookup. |
 | `frontend/src/features/department/DepartmentQueuePage.jsx` | Assigned queue, call-next, no-show requeue, completion, and forwarding. |
 | `frontend/src/features/display/` | One-time pairing route and anonymous read-only department display. |

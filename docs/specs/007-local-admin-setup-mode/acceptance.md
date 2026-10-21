@@ -2,9 +2,11 @@
 
 **Status:** Implemented and locally verified on 2026-10-21. The API integration used a disposable MySQL 8.4 `queuing_test` database; its container was stopped after the run.
 
+The follow-up Admin navigation change adds a direct `/admin/departments` route. Its local-setup browser assertion remains pending rerun. The authenticated Admin browser flow reached the UI but stopped at an ambiguous sidebar link locator; that selector is corrected, and rerun is pending. The evidence below records the earlier SPEC-007 verification.
+
 | Requirement | Evidence | Status |
 |---|---|---|
-| Vite development opens Admin without a login screen or session request | Playwright local setup route test verified `/` redirects to `/admin`, the Clinic configuration page and local-mode label appear, and no session/login request is made | Passed |
+| Vite development opens Admin without a login screen or session request | Earlier Playwright run verified `/` reaches Admin, the Clinic configuration page and local-mode label appear, and no session/login request is made. The follow-up `/admin/departments` route assertion is pending rerun. | Follow-up pending |
 | Anonymous loopback Admin configuration read/write works with antiforgery | Opt-in MySQL/API integration read the Admin services endpoint and created a department using the existing CSRF client without a login cookie | Passed |
 | Local setup does not grant queue access | Same API integration requested an anonymous department queue and received `401` | Passed |
 | Real signed-in setup and queue workflows remain usable | Opt-in MySQL browser/API workflow completed Admin config, login, reception issue, staff queue, and paired display flow | Passed |
