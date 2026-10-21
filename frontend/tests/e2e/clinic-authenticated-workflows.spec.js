@@ -9,6 +9,8 @@ async function mockApi(page, initialRole = null, forcePasswordChange = false) {
   ];
   const users = [];
   const displays = [];
+  const services = [];
+  const stations = [];
   const requests = [];
   let paired = false;
   const waiting = [{ id: "visit-2", visitCode: "Q-002", issuedAtUtc: "2026-10-20T00:00:00Z" }];
@@ -51,7 +53,32 @@ async function mockApi(page, initialRole = null, forcePasswordChange = false) {
     if (path.startsWith("/admin/users/") && method === "PATCH") {
       const user = users.find((item) => item.id === path.split("/").at(-1));
       Object.assign(user, body);
+      if (!user.active || user.role !== "Staff") {
+        for (const station of stations) station.staffUserIds = station.staffUserIds.filter((id) => id !== user.id);
+      }
       return json(user);
+    }
+    if (path === "/admin/services" && method === "GET") return json(services);
+    if (path === "/admin/services" && method === "POST") {
+      const created = { id: "service-new", ...body, active: true };
+      services.push(created);
+      return json(created, 201);
+    }
+    if (path.startsWith("/admin/services/") && method === "PATCH") {
+      const service = services.find((item) => item.id === path.split("/").at(-1));
+      Object.assign(service, body);
+      return json(service);
+    }
+    if (path === "/admin/stations" && method === "GET") return json(stations);
+    if (path === "/admin/stations" && method === "POST") {
+      const created = { id: "station-new", serviceIds: [], staffUserIds: [], ...body, active: true };
+      stations.push(created);
+      return json(created, 201);
+    }
+    if (path.startsWith("/admin/stations/") && method === "PATCH") {
+      const station = stations.find((item) => item.id === path.split("/").at(-1));
+      Object.assign(station, body);
+      return json(station);
     }
     if (path === "/admin/displays" && method === "GET") return json(displays);
     if (path === "/admin/displays" && method === "POST") {
@@ -141,6 +168,27 @@ test("admin can add a department and provision a user without exposing a passwor
   await page.getByRole("button", { name: "Provision user" }).click();
   await expect(page.getByText("one-time-secret")).toBeVisible();
   await expect(page.getByLabel("Password")).toHaveCount(0);
+  await page.getByLabel("Service name").fill("X-ray Imaging");
+  await page.getByLabel("Service department").selectOption("dept-xray");
+  await page.getByRole("button", { name: "Add service" }).click();
+  await expect(page.getByRole("region", { name: "Services" }).getByText("X-ray Imaging", { exact: true })).toBeVisible();
+  await page.getByLabel("Station name").fill("Window 1");
+  await page.getByLabel("Station department").selectOption("dept-xray");
+  await page.getByLabel("Services handled").selectOption("service-new");
+  await page.getByLabel("Assigned staff").selectOption("user-new");
+  await page.getByRole("button", { name: "Add station" }).click();
+  const stationRegion = page.getByRole("region", { name: "Stations" });
+  await expect(stationRegion.getByText("Window 1", { exact: true })).toBeVisible();
+  await expect(stationRegion.getByText("X-ray Imaging", { exact: true })).toBeVisible();
+  await expect(stationRegion.getByText("new-staff", { exact: true })).toBeVisible();
+  const savedStationForm = stationRegion.locator("form.admin-record");
+  await savedStationForm.getByLabel("Station name").fill("Window 1 Front Desk");
+  await savedStationForm.getByRole("button", { name: "Save station" }).click();
+  await expect(stationRegion.getByText("Window 1 Front Desk", { exact: true })).toBeVisible();
+  const savedUserForm = page.getByRole("region", { name: "Users" }).locator("form.admin-record").filter({ hasText: "new-staff" });
+  await savedUserForm.getByLabel("Active").uncheck();
+  await savedUserForm.getByRole("button", { name: "Save user access" }).click();
+  await expect(savedStationForm.getByLabel("Assigned staff").locator('option[value="user-new"]')).toHaveCount(0);
   await page.getByLabel("Monitor name").fill("X-ray Waiting Room");
   await page.getByLabel("Assigned department", { exact: true }).selectOption("dept-xray");
   await page.getByRole("button", { name: "Create monitor" }).click();
