@@ -82,6 +82,18 @@ export const usersApi = {
   update: (id, changes) => api(`/admin/users/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(changes) }),
 };
 
+export const servicesApi = {
+  list: (signal) => api("/admin/services", { signal }),
+  create: (service) => api("/admin/services", { method: "POST", body: JSON.stringify(service) }),
+  update: (id, changes) => api(`/admin/services/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(changes) }),
+};
+
+export const stationsApi = {
+  list: (signal) => api("/admin/stations", { signal }),
+  create: (station) => api("/admin/stations", { method: "POST", body: JSON.stringify(station) }),
+  update: (id, changes) => api(`/admin/stations/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(changes) }),
+};
+
 export const displaysApi = {
   list: (signal) => api("/admin/displays", { signal }),
   create: (display) => api("/admin/displays", { method: "POST", body: JSON.stringify(display) }),
