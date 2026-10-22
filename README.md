@@ -7,13 +7,16 @@ A local clinic queue app with an ASP.NET Core API, a VB.NET workflow library, an
 - **API:** C# ASP.NET Core 10, ASP.NET Identity cookie sessions, EF Core 10, and MySQL 8.x.
 - **Core:** VB.NET transition and appointment eligibility rules in `backend/Queuing.Core/`.
 - **Frontend:** React JavaScript + Vite in `frontend/`; versioned HTTP calls are centralized in `frontend/src/api/client.js`.
-- **Workflow:** Admin configures departments, services, physical stations, staff assignments, and monitors; Reception issues a visit; assigned staff call, return a no-show to pending, and complete or forward the visit.
+- **Workflow:** Admin configures departments, services, physical stations, staff assignments, and monitors; Reception chooses an active service and issues a visit; assigned staff call, return a no-show to pending, then complete or forward the visit by choosing its next service.
+- **Kiosk:** Admin registers a kiosk and generates a one-time pairing code. At `/kiosk`, a paired device lets walk-ins choose a Department, then a Service, confirm, and issue an anonymous ticket through the same daily sequence as Reception. Kiosks cannot read queues or staff records.
 - **Displays:** Open `/display/pair` in a new monitor tab and enter its one-time admin-generated code. The monitor receives a revocable device-only cookie and opens `/display` without a staff username or password.
-- **Persistence:** `backend/Queuing.Api/Data/Migrations/` contains the initial schema, queue timestamp precision, and service/station configuration migrations. The one-time `--bootstrap-admin` command applies migrations and seeds the three initial departments and roles.
+- **Persistence:** `backend/Queuing.Api/Data/Migrations/` contains the initial schema, queue timestamp precision, service/station configuration, service-linked visit-step, and kiosk issuer migrations. The one-time `--bootstrap-admin` command applies migrations and seeds the three initial departments and roles.
 
-The visit code is clinic-wide and daily, based on `Asia/Manila`; it can repeat on a later date. Department ordering is due appointments first, then FIFO walk-ins. The API is the queue authority. A display receives only its department name and anonymous visit codes. No patient identifiers are collected.
+The visit code is clinic-wide and daily, based on `Asia/Manila`; it can repeat on a later date. Reception can reprint by visit code plus clinic date. Kiosk issue is walk-in only and prints through an explicit browser print action. Service determines each new step's Department, but queue ordering and calling remain Department-scoped. Ordering is due appointments first, then FIFO walk-ins. The API is the queue authority. A display receives only its department name and anonymous visit codes. No patient identifiers are collected.
 
 This is a local MVP implementation. The opt-in MySQL and browser workflow is recorded in SPEC-005; it does not establish backup/restore readiness, multi-instance behavior, or production readiness. Use synthetic visits and a dedicated local database.
+
+SPEC-009 kiosk source and migration are implemented, but kiosk API behavior, migration application, browser accessibility/responsiveness, and physical printing have not yet been verified in this checkout.
 
 ## Local setup
 
@@ -41,11 +44,11 @@ npm --prefix frontend ci
 npm --prefix frontend run dev -- --host 127.0.0.1
 ```
 
-The default Vite development session opens the Admin workspace without sign-in so clinic configuration can be prepared before accounts exist. The API permits these Admin configuration requests only when `LocalSetup:Enabled` is true, ASP.NET Core is in `Development`, and both the request Host and remote address are loopback. Keep both servers bound to `127.0.0.1`; Admin changes in this mode have no authenticated actor ID in the audit record.
+The default Vite development session opens the Admin workspace without sign-in so clinic configuration can be prepared before accounts exist. For frontend route previews, open `http://127.0.0.1:5173/reception` or `/department`; the page uses a local synthetic role based on the URL. This frontend preview does not authenticate Reception or Staff API requests, so issuing visits and loading or operating department queues still require a real account. Admin configuration API access remains available only when `LocalSetup:Enabled` is true, ASP.NET Core is in `Development`, and both the request Host and remote address are loopback. Keep both servers bound to `127.0.0.1`; Admin changes in this mode have no authenticated actor ID in the audit record.
 
 To use the regular login flow locally, start Vite with `VITE_LOCAL_SETUP_MODE=false` and the API with `LocalSetup__Enabled=false`. A production Vite build does not enable the frontend bypass. See [SPEC-007](docs/specs/007-local-admin-setup-mode/spec.md).
 
-Open the frontend at `http://127.0.0.1:5173`. To pair a monitor, open `http://127.0.0.1:5173/display/pair` in a new tab on that monitor; after activation, leave the tab on the department display. Vite forwards `/api` and `/hubs` to the local API.
+Open the frontend at `http://127.0.0.1:5173`. To pair a monitor, open `http://127.0.0.1:5173/display/pair` in a new tab on that monitor; after activation, leave the tab on the department display. To pair a kiosk, register it under Admin → Kiosks, create a pairing code, open `http://127.0.0.1:5173/kiosk/pair` on the kiosk device, then leave the browser at `/kiosk`. Vite forwards `/api` and `/hubs` to the local API.
 
 ## Checks
 
@@ -58,7 +61,7 @@ npm --prefix frontend run build
 npm --prefix frontend run test:e2e
 ```
 
-The default Playwright browser tests mock API responses. An opt-in test starts the real API and frontend against an isolated MySQL test database and exercises configuration authorization, service/station assignments, queue operations, browser issue/call, monitor pairing, live updates, and revocation. It creates test departments, services, stations, and visits; run it only against a disposable database whose name ends with `_test`.
+The default Playwright browser tests mock API responses. An opt-in test starts the real API and frontend against an isolated MySQL test database and exercises configuration authorization, service/station assignments, service-linked issue and forwarding, code/date receipt reprint, queue operations, monitor pairing, live updates, and revocation. It creates test departments, services, stations, and visits; run it only against a disposable database whose name ends with `_test`.
 
 To exercise the no-login local setup route with mocked API responses, run `QUEUING_LOCAL_SETUP_E2E=1 npm --prefix frontend run test:e2e -- tests/e2e/local-setup-mode.spec.js` after configuring the local API connection string.
 
@@ -78,6 +81,8 @@ npm run test:e2e -- tests/e2e/clinic-mysql-integration.spec.js
 - `PRD.md`, `ARD.md`, `SDD.md` — product, architecture, and development notes.
 - `docs/specs/005-forwarding-clinic-queue/` — approved MVP brief, plan, tasks, and acceptance record.
 - `docs/specs/007-local-admin-setup-mode/` — temporary loopback-only no-login setup mode for local development.
+- `docs/specs/008-service-aware-visit-issue/` — service-based Reception issue, forwarding, and receipt reprint by daily code/date.
+- `docs/specs/009-self-service-kiosk/` — department-first walk-in kiosk, independent device pairing, API scope, responsive UI direction, and acceptance criteria.
 - `docs/adr/0002-mysql-and-forwarding-visits.md` — selected MySQL provider and stable forwarded visit-code decisions.
 - `docs/CODEBASE_MAP.md`, `docs/STRUCTURE.md` — current source map and layout.
 - `skills/project-knowledge/SKILL.md` — default documentation and knowledge retention guidance.

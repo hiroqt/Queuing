@@ -10,11 +10,11 @@ Queuing/
 ├── Queuing.slnx
 ├── backend/
 │   ├── Queuing.Api/       # C# ASP.NET Core API, Identity, EF Core/MySQL persistence
-│   │   ├── Auth/          # Bootstrap, claims and department scope
-│   │   ├── Controllers/   # Auth, admin department/user/service/station/display config, visits, queues
+│   │   ├── Auth/          # Bootstrap, claims, department scope, display and kiosk devices
+│   │   ├── Controllers/   # Auth, admin config, Reception/kiosk issue, staff queue commands
 │   │   ├── Data/          # DbContext, design-time factory, health check, migrations
 │   │   ├── Hubs/          # Read-only scoped SignalR notifications
-│   │   └── Services/      # Persisted outbox dispatcher
+│   │   └── Services/      # Outbox dispatch, shared visit-command support and issue transaction
 │   ├── Queuing.Core/      # VB.NET queue transition and eligibility rules; legacy demo store
 │   └── Queuing.Core.Tests/ # C# xUnit tests for the VB.NET core rules
 ├── frontend/
@@ -24,7 +24,7 @@ Queuing/
 │   │   ├── App.jsx        # shared shell and frontend routes
 │   │   ├── api/           # Central versioned HTTP API client
 │   │   ├── auth/          # Login, session, password-change and route guards
-│   │   └── features/      # Admin, Reception, Department Staff, Display pairing/view
+│   │   └── features/      # Admin, Reception, Department Staff, Display pairing/view, Kiosk
 │   │       └── admin/     # Admin route shell, sidebar nav model, shared UI, and one section per config area
 │   └── tests/             # Node API/role unit tests and Playwright E2E
 ├── docs/                  # code map, specs, ADRs, decisions, templates, runbooks
@@ -36,7 +36,7 @@ Queuing/
 
 The projects target .NET 10. The earlier SPEC-003/SPEC-004 in-memory presentation slices are retained as historical specifications/core tests; their old API routes were removed when SPEC-005 took over the application API.
 
-SPEC-005 is implemented in the existing API and React app: persistent MySQL-backed visits and dynamic departments/users/displays. SPEC-006 adds dynamic Services, physical Stations, and same-department Staff/Service assignments to the existing Admin page. Service/Station configuration does not yet affect issue, forwarding, or call behavior. The initial schema and timestamp-precision migrations, one-time admin bootstrap, and covered MySQL 8.4 API/browser workflow have passed locally. Date rollover, concurrent issue/forward races, recovery, and production readiness remain unverified. `docs/adr/0002-mysql-and-forwarding-visits.md` supersedes ADR-0001's proposed PostgreSQL choice for this slice.
+SPEC-005 is implemented in the existing API and React app: persistent MySQL-backed visits and dynamic departments/users/displays. SPEC-006 adds dynamic Services, physical Stations, and same-department Staff/Service assignments to the Admin page. SPEC-008 uses active Services for Reception issue and staff forwarding, and supports receipt lookup by daily visit code plus clinic date. SPEC-009 adds separately paired kiosks for anonymous walk-in issue. Call-next and displays remain Department-scoped; stations do not yet affect queue operations. The SPEC-009 migration is scaffolded but was not applied in this turn. `docs/adr/0002-mysql-and-forwarding-visits.md` supersedes ADR-0001's proposed PostgreSQL choice for this slice.
 
 ## Growth path
 

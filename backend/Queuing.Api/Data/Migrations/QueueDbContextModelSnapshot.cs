@@ -156,6 +156,9 @@ namespace Queuing.Api.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("varchar(80)");
 
+                    b.Property<Guid?>("ActorKioskDeviceId")
+                        .HasColumnType("char(36)");
+
                     b.Property<Guid?>("ActorUserId")
                         .HasColumnType("char(36)");
 
@@ -179,6 +182,8 @@ namespace Queuing.Api.Migrations
                         .HasColumnType("varchar(80)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ActorKioskDeviceId");
 
                     b.ToTable("AuditRecords");
                 });
@@ -271,6 +276,9 @@ namespace Queuing.Api.Migrations
                         .HasPrecision(6)
                         .HasColumnType("datetime(6)");
 
+                    b.Property<Guid?>("ServiceId")
+                        .HasColumnType("char(36)");
+
                     b.Property<string>("State")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -280,6 +288,8 @@ namespace Queuing.Api.Migrations
                         .HasColumnType("char(36)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DepartmentId", "ServiceId");
 
                     b.HasIndex("DepartmentId", "State", "AppointmentAtUtc", "EnteredAtUtc");
 
@@ -366,6 +376,45 @@ namespace Queuing.Api.Migrations
                         .IsUnique();
 
                     b.ToTable("IdempotencyRecords");
+                });
+
+            modelBuilder.Entity("Queuing.Api.Data.KioskDevice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("CredentialHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTimeOffset?>("PairedAtUtc")
+                        .HasColumnType("datetime");
+
+                    b.Property<string>("PairingCodeHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTimeOffset?>("PairingExpiresAtUtc")
+                        .HasColumnType("datetime");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CredentialHash")
+                        .IsUnique();
+
+                    b.HasIndex("PairingCodeHash")
+                        .IsUnique();
+
+                    b.ToTable("KioskDevices");
                 });
 
             modelBuilder.Entity("Queuing.Api.Data.OutboxMessage", b =>
@@ -570,7 +619,10 @@ namespace Queuing.Api.Migrations
                     b.Property<DateTimeOffset>("IssuedAtUtc")
                         .HasColumnType("datetime");
 
-                    b.Property<Guid>("IssuedByUserId")
+                    b.Property<Guid?>("IssuedByKioskDeviceId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid?>("IssuedByUserId")
                         .HasColumnType("char(36)");
 
                     b.Property<int>("Sequence")
@@ -586,6 +638,8 @@ namespace Queuing.Api.Migrations
                     b.HasIndex("CurrentStepId")
                         .IsUnique();
 
+                    b.HasIndex("IssuedByKioskDeviceId");
+
                     b.HasIndex("IssuedByUserId");
 
                     b.HasIndex("ClinicDate", "Sequence")
@@ -594,7 +648,10 @@ namespace Queuing.Api.Migrations
                     b.HasIndex("Id", "CurrentStepId")
                         .IsUnique();
 
-                    b.ToTable("Visits");
+                    b.ToTable("Visits", t =>
+                        {
+                            t.HasCheckConstraint("CK_Visits_ExactlyOneIssuer", "(`IssuedByUserId` IS NOT NULL AND `IssuedByKioskDeviceId` IS NULL) OR (`IssuedByUserId` IS NULL AND `IssuedByKioskDeviceId` IS NOT NULL)");
+                        });
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
@@ -648,6 +705,14 @@ namespace Queuing.Api.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Queuing.Api.Data.AuditRecord", b =>
+                {
+                    b.HasOne("Queuing.Api.Data.KioskDevice", null)
+                        .WithMany()
+                        .HasForeignKey("ActorKioskDeviceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("Queuing.Api.Data.ClinicService", b =>
                 {
                     b.HasOne("Queuing.Api.Data.Department", "Department")
@@ -673,7 +738,15 @@ namespace Queuing.Api.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Queuing.Api.Data.ClinicService", "Service")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId", "ServiceId")
+                        .HasPrincipalKey("DepartmentId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Department");
+
+                    b.Navigation("Service");
 
                     b.Navigation("Visit");
                 });
@@ -762,11 +835,15 @@ namespace Queuing.Api.Migrations
 
             modelBuilder.Entity("Queuing.Api.Data.Visit", b =>
                 {
+                    b.HasOne("Queuing.Api.Data.KioskDevice", "IssuedByKioskDevice")
+                        .WithMany()
+                        .HasForeignKey("IssuedByKioskDeviceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Queuing.Api.Data.QueueUser", "IssuedBy")
                         .WithMany()
                         .HasForeignKey("IssuedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Queuing.Api.Data.DepartmentStep", "CurrentStep")
                         .WithOne()
@@ -777,6 +854,8 @@ namespace Queuing.Api.Migrations
                     b.Navigation("CurrentStep");
 
                     b.Navigation("IssuedBy");
+
+                    b.Navigation("IssuedByKioskDevice");
                 });
 
             modelBuilder.Entity("Queuing.Api.Data.QueueUser", b =>

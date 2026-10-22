@@ -7,10 +7,10 @@
 > Database decision update: ADR-0002 and SPEC-005 supersede PostgreSQL references in this draft for the forwarding implementation. Use MySQL 8.x with EF Core 10. Replace PostgreSQL-specific concurrency guidance below with MySQL/InnoDB constraints, transactions, locking, and integration tests.
 
 ## 1. Drivers
-Correctness under concurrent use, staff least-privilege, public data minimization, configure-not-code clinic setup, recoverability, and straightforward deployment for small clinics. Architectural choice: **modular monolith**—one ASP.NET Core API process, one MySQL 8.x DB for SPEC-005, one React SPA (admin/staff/display routes). Separate modules in code, not separate deployments.
+Correctness under concurrent use, staff least-privilege, public data minimization, configure-not-code clinic setup, recoverability, and straightforward deployment for small clinics. Architectural choice: **modular monolith**—one ASP.NET Core API process, one MySQL 8.x DB for SPEC-005, one React SPA (admin/staff/display/kiosk routes). Separate modules in code, not separate deployments.
 
 ## 2. System context
-React SPA (admin/staff) → HTTPS REST API → use cases → EF Core/MySQL. Public display React route → scoped display snapshot endpoint + authenticated display SignalR subscription. Outbox dispatcher emits *notification of change* after transaction commit; display fetches latest snapshot. Reverse proxy uses same origin (`/`, `/api`, `/hubs`); TLS termination; host health checks.
+React SPA (admin/staff/kiosk) → HTTPS REST API → use cases → EF Core/MySQL. Public display React route → scoped display snapshot endpoint + authenticated display SignalR subscription. The patient kiosk has a separate device-authenticated choices/issue API and cannot access display or staff data. Outbox dispatcher emits *notification of change* after transaction commit; display fetches latest snapshot. Reverse proxy uses same origin (`/`, `/api`, `/hubs`); TLS termination; host health checks.
 
 ## 3. Code boundaries
 - `IdentityAccess`: ASP.NET Core Identity and server policies, staff-counter assignments.
@@ -18,6 +18,7 @@ React SPA (admin/staff) → HTTPS REST API → use cases → EF Core/MySQL. Publ
 - `Queuing`: `Ticket`, `QueueSession`, transition rules, atomic ticket issue/call-next/skip/recall/complete; owns queue data.
 - `Ticketing`: printable projections/templates/reprints; requests queue ticket data using read contract, not direct table writes.
 - `Displays`: profiles, assignment, enrollment, snapshot projections and SignalR hub; never becomes ticket truth.
+- `Kiosk`: Admin enrollment, revocable device identity, active Department/Service choices, and anonymous walk-in issue only; cannot read queues, receipts, or staff data.
 - `Audit`: append-only audit infrastructure, correlation metadata; minimal administrative read API.
 Module integration via contracts (typed request/query interfaces, domain/integration events); avoid cross-module direct DbContexts and cyclic dependencies. Logical modules may initially share physical DB with distinct schemas and migrations ownership.
 
@@ -35,6 +36,8 @@ See `docs/STRUCTURE.md` for exhaustive tree and `docs/adr/0001-architecture.md` 
 - `VisitEvent(id, visit_id, department_step_id?, kind, actor_id, occurred_at_utc, metadata_safe)`
 - `IdempotencyRecord(scope, key_hash, request_hash, result_ref, created_at_utc)`
 - `DisplayDevice(id, name, credential_hash, active, last_seen_at_utc)`
+- `KioskDevice(id, name, active, pairing_code_hash, credential_hash, paired_at_utc)`; separate from read-only display devices.
+- `Visit` has exactly one issuer: nullable `issued_by_user_id` or nullable `issued_by_kiosk_device_id`; a database check enforces the exclusive choice. Kiosk audit records carry `actor_kiosk_device_id`.
 - `DisplayProfile(id, template_key, config_json, version)`; `DisplayAssignment(display_id, service_id?, counter_id?)`
 - `TicketPrintTemplate(id, name, paper_width_mm, config_json, active)`; `PrintAudit(id, ticket_id, user_id, kind, at_utc)`
 - `AuditRecord(id, actor_id, action, target_type, target_id, timestamp_utc, correlation_id, safe_diff)`
@@ -46,30 +49,31 @@ Keys: unique `(clinic_date, sequence)`, FK constraints, permitted state enum/che
 For SPEC-005, a visit has one stable code and a current department step. A step transitions `Pending → Called → Pending` for an explicit no-show, or `Called → Completed`; completion may atomically select and create one `Pending` next step. Final completion closes the visit. A future appointment is not eligible before its scheduled time. Every transition is command-only, authorized and audited. Invalid transitions return `409 Conflict`; missing resource `404`; forbidden `403`; validation `400`/`422` per API standard. This state model supersedes the earlier proposed skip/recall semantics for the SPEC-005 flow.
 
 ## 7. Atomic operations
-- **Issue:** validate Reception access; idempotency lookup; allocate the clinic-local daily visit sequence in an InnoDB transaction with a unique constraint; persist visit/event/outbox; commit; then notify.
+- **Issue:** validate Reception or paired KioskDevice access; idempotency lookup scoped by actor; allocate the clinic-local daily visit sequence in an InnoDB transaction with a unique constraint; persist visit, explicit actor, audit, and outbox; commit; then notify.
 - **CallNext:** transaction obtains the earliest eligible due appointment, then FIFO walk-in for the assigned department; excludes future appointments and uses MySQL 8.x-verified locking or conditional updates; persist event/outbox and commit before returning the visit.
 - **Forward:** atomically complete the active department step and create exactly one pending step at the selected active department; constraints and conditional updates prevent parallel active steps.
 - **Retry:** the same idempotency key and payload returns prior result; key reuse with different payload is rejected. Document key TTL/retention and enforce unique scope.
 - **Print:** print render is deterministic from persisted ticket + versioned template; printing is initiated by UI, physical success cannot be guaranteed by browser. Reprint preserves ticket ID and creates audit event.
 
 ## 8. API contracts (illustrative; finalize OpenAPI before code)
-`POST /api/v1/tickets`; `POST /api/v1/counters/{counterId}/call-next`; `POST /api/v1/tickets/{ticketId}/recall`; `/skip`; `/complete`; `GET /api/v1/counters/{counterId}/queue`; admin `GET/POST/PATCH` services/counters/assignments/display profiles/templates; display `GET /api/v1/displays/me/snapshot`; SignalR `/hubs/displays` and `/hubs/staff`. Mutations require CSRF token if authenticated by cookie; `Idempotency-Key` for issuance and call-next. Use RFC 9457 Problem Details and correlation IDs. Generate frontend types from OpenAPI.
+Implemented routes are listed in their feature specs. SPEC-009 adds `GET /api/v1/kiosk/choices`, `POST /api/v1/kiosk/visits`, and separate admin/activation/logout routes. Kiosk issue requires the KioskDevice cookie, CSRF token, and `Idempotency-Key`; it has no appointment field and cannot call staff queue or receipt endpoints. Use RFC 9457 Problem Details and correlation IDs.
 
 ## 9. Auth and trust boundaries
 - Same-origin production, secure HttpOnly session cookies, SameSite according to deployment, anti-forgery token required for all state-changing cookie-auth requests, HTTPS+HSTS, session timeout/logout/revocation, password/MFA policy based on risk.
 - Local development has the narrowly scoped SPEC-007 exception: no-login Admin configuration is allowed only when explicitly enabled in Development and both request Host and remote address are loopback. It does not change production authentication or non-admin API authorization.
 - Admin and Staff policies plus **resource-based** checks on counter/service/department assignment. Identity role ≠ automatic access to every queue.
 - Public display has revocable, scope-limited device credential established by pairing with admin approval, no staff session reuse; broadcast only safe snapshot deltas; SignalR groups are routing only, not an authorization mechanism.
+- Kiosk uses a distinct revocable device credential, authorization scheme, cookie, and narrow API projection. Anonymous activation is rate limited; issue remains antiforgery protected and rate limited. Revoked devices cannot read choices or issue; kiosk authorization grants no DisplayDevice or staff access.
 - Rate limiting, payload size limits, validation, safe error messages and non-sensitive structured logs. Threat-model credential theft, display impersonation, replay, XSS, CSRF, race conditions and excessive requests.
 
 ## 10. Dynamic configuration without dynamic executable code
-Admin configures database records (`Services`, `Stations`, `StationServices`, `StationStaff`, `DisplayProfiles`, `DisplayAssignments`, `PrintTemplates`). React selects between **versioned, pre-registered templates** by `template_key`, validates `config_json` against versioned schema. New module/screen behavior requires code and approved SDD release. Unknown template key or invalid schema fails safely. Archive referenced config instead of cascade deleting. SPEC-006 implements Service/Station administration only; Service-aware issue/forward/call behavior is a later slice.
+Admin configures database records (`Services`, `Stations`, `StationServices`, `StationStaff`, `DisplayProfiles`, `DisplayAssignments`, `PrintTemplates`, `KioskDevices`). React selects between **versioned, pre-registered templates** by `template_key`, validates `config_json` against versioned schema. New module/screen behavior requires code and approved SDD release. Unknown template key or invalid schema fails safely. Archive referenced config instead of cascade deleting. SPEC-006 implemented Service/Station administration. [SPEC-008](docs/specs/008-service-aware-visit-issue/spec.md) links Services to Reception issue and forwarding; [SPEC-009](docs/specs/009-self-service-kiosk/spec.md) adds a narrow kiosk ticket-issue path. Station-based calling and service-partitioned queues remain deferred. Existing queue reads, calls, and displays remain Department-scoped.
 
 ## 11. Realtime semantics
 Publish `queue.changed` with queue/session ID and revision only after commit. Display first obtains snapshot; subscribes to scoped updates; on event refetches/merges by monotonic revision, on reconnect and periodically refetches full snapshot. Show offline/disconnected indicator and last sync; never indicate that an unacknowledged action succeeded. Use same-instance SignalR initially; document scaling plan before adding replicas or Redis backplane.
 
 ## 12. Printing
-MVP: print-specific React CSS/template (`58mm`, `80mm`) using browser print dialog and tested printer profiles. No silent or automatic printer control promised. Print data comes from durable server ticket; no new ticket on reprint; redact sensitive info; log user/time/attempt. If unattended ESC/POS becomes required, create a separate approved printer-agent spec and security design.
+MVP: print-specific React CSS/template (`58mm`, `80mm`) using browser print dialog and tested printer profiles. No silent or automatic printer control promised. Print data comes from durable server ticket; no new ticket on reprint; redact sensitive info; log user/time/attempt. SPEC-009 reuses the 58 mm browser-print style for kiosk receipts; physical kiosk printer behavior is unverified. If unattended ESC/POS becomes required, create a separate approved printer-agent spec and security design.
 
 ## 13. Operations and observability
 Structured logs with correlation IDs (no PHI), OpenTelemetry traces/metrics, health/liveness/readiness checks, EF migration as reviewed deployment step, backward-compatible config/DB changes, encrypted daily backups and restore drills, migration rollback/recovery playbook, secrets via environment/secret manager. Record errors, outbox lag, duplicate/conflict attempts, real-time disconnect counts. Set RPO/RTO with owner pre-launch. Test restarting backend and disconnecting display.

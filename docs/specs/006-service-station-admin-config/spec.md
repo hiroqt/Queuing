@@ -1,6 +1,6 @@
 # SPEC-006 — Service and station administration
 
-**Status:** Approved for implementation | **Date:** 2026-10-21 | **PRD refs:** FR-03, FR-04 | **Architecture:** ARD-CQ-001, SPEC-005
+**Status:** Implemented (configuration-only scope) | **Date:** 2026-10-21 | **PRD refs:** FR-03, FR-04 | **Architecture:** ARD-CQ-001, SPEC-005
 
 ## User problem / actor
 
@@ -13,9 +13,9 @@ Clinic administrators need to configure the services that staff handle and the p
 - A Station is a physical operating counter/window and belongs to exactly one Department.
 - A Station can handle multiple Services and have multiple assigned staff. Staff can be assigned to multiple Stations.
 - A Station's Services and staff assignments must belong to that Station's Department. Staff must also have the existing Staff role and department assignment.
-- Each future DepartmentStep will carry one Service. Reception will choose the initial Service; staff will choose a Service when forwarding. Department is derived from that Service.
+- The follow-up [SPEC-008](../008-service-aware-visit-issue/spec.md) now attaches a Service to each newly issued or forwarded DepartmentStep. Reception chooses the initial Service and Staff chooses a next Service; the Department is derived from that Service.
 - Future queue calls will select an assigned Station and Service, then call within that Service's queue. Existing appointment-first and FIFO walk-in ordering remains in force.
-- This implementation adds administrator configuration only. Ticket issue, forwarding, queue reads/call-next, displays, and their contracts do not change in this slice.
+- This spec implemented administrator configuration only. SPEC-008 later updated issue and forwarding; queue reads/call-next, displays, and their contracts remain Department-scoped.
 
 ## Scope / non-goals
 
@@ -32,7 +32,7 @@ Clinic administrators need to configure the services that staff handle and the p
 ### Out of scope
 
 - Changing the visual design system or other screens.
-- Service selection during Reception issue or staff forwarding.
+- Service selection during Reception issue or staff forwarding (implemented later by SPEC-008).
 - Service-filtered queue reads, Station selection for calling, station-scoped authorization of queue commands, ticket/display changes, or queue ordering changes. These are a later integration slice.
 - Appointment scheduling, patient identity, a separate Channel concept, shift scheduling, station/device pairing, new projects, or a database/provider change.
 
@@ -74,7 +74,7 @@ Invalid input or cross-department assignment returns `400`; duplicate names retu
 - Station-Service links reference Services in the same Department as the Station.
 - Station-Staff links reference active Staff users assigned to the same Department as the Station.
 - Unique keys prevent duplicate Service/Station names within a Department and duplicate assignment links.
-- Referenced records are deactivated, not deleted. Inactive Services and Stations remain visible to administrators. Inactive Services are retained in existing Station assignments; operational queue behavior will only use active configuration in the later integration slice.
+- Referenced records are deactivated, not deleted. Inactive Services and Stations remain visible to administrators. Inactive Services are retained in existing Station assignments; SPEC-008 requires active Services for new issue/forward steps, while station-specific call behavior remains deferred.
 - If a user is deactivated, changes away from Staff, or loses a Department assignment, affected Station-Staff links are removed within the same database transaction.
 - All create/update/deactivate/reactivate operations add an audit record with actor, target, action, and correlation ID. Audit details contain no patient information.
 - Service and Station configuration does not create a visit, ticket code, queue event, or display notification.
@@ -120,5 +120,5 @@ Invalid input or cross-department assignment returns `400`; duplicate names retu
 ## Open decisions and signoff
 
 - User confirmed the approval gate on 2026-10-21: implement this scoped admin configuration after recording the decisions and implementation plan.
-- The already-settled future queue direction is documented above; it is not acceptance criteria for this implementation.
+- Service-aware issue/forward behavior is implemented by the follow-up SPEC-008; station-scoped calling remains a separate later slice.
 - Production deployment, shift schedules, and recovery procedures remain outside this feature.

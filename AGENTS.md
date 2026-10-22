@@ -28,7 +28,7 @@ Build and maintain a **basic clinic queue** toward the proposed React/TypeScript
 
 ## MVP scope fence
 Allowed: admin config of staff roles, services, counters, queue numbering, printer ticket formats, display registration/assignment and templates; staff issuance/call/recall/skip/complete; printable ticket; read-only public queue display; minimum auth/audit/ops plumbing.
-Disallowed until new approved spec: health records, patient PHI, appointment scheduling engines/imports, payments, priority classes beyond explicitly approved policies, kiosks, SMS, push notifications, voice announcements, independent branches/multitenancy, offline issuing, dynamic code plugins. SPEC-005 explicitly allows reception/staff to enter an optional local appointment time on each visit step; it does not approve scheduling integration.
+Disallowed until new approved spec: health records, patient PHI, appointment scheduling engines/imports, payments, priority classes beyond explicitly approved policies, kiosk functions beyond the bounded walk-in flow in SPEC-009, SMS, push notifications, voice announcements, independent branches/multitenancy, offline issuing, dynamic code plugins. SPEC-005 explicitly allows reception/staff to enter an optional local appointment time on each visit step; it does not approve scheduling integration.
 
 ## Coding and maintainability
 - C#: nullable enabled, async cancellation tokens, clear names, small methods, explicit result/error types, DI, options validation, bounded DbContext lifetimes; never block async (`.Result`/`.Wait`).

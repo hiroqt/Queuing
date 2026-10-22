@@ -1,8 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-using System.Globalization;
-using System.Security.Claims;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Queuing.Api.Auth;
 using Queuing.Api.Data;
+using Queuing.Api.Services;
 using Queuing.Core;
 
 namespace Queuing.Api.Controllers;
@@ -18,86 +14,6 @@ namespace Queuing.Api.Controllers;
 [Route("api/v1")]
 public sealed class VisitCommandsController(QueueDbContext db, TimeProvider clock) : ControllerBase
 {
-    private static readonly TimeZoneInfo ClinicTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila");
-
-    [HttpPost("visits")]
-    [Authorize(Policy = QueueRoles.Reception)]
-    public async Task<IActionResult> Issue(
-        [FromBody] IssueVisitRequest request,
-        [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
-        CancellationToken cancellationToken)
-    {
-        var key = ParseIdempotencyKey(idempotencyKey);
-        if (key is null) return Problem(statusCode: 400, title: "A valid Idempotency-Key is required.");
-        var appointmentAtUtc = ParseClinicLocalTime(request.AppointmentAtLocal);
-        if (appointmentAtUtc.IsInvalid)
-        {
-            return Problem(statusCode: 400, title: "Appointment time must use YYYY-MM-DDTHH:mm in the clinic timezone.");
-        }
-        if (!await db.Departments.AnyAsync(department => department.Id == request.InitialDepartmentId && department.Active, cancellationToken))
-        {
-            return Problem(statusCode: 400, title: "Choose an active department.");
-        }
-
-        var userId = CurrentUserId();
-        if (userId is null) return Unauthorized();
-        var scope = $"visit.issue:{userId}";
-        var requestHash = Hash(JsonSerializer.Serialize(request));
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var replay = await FindReplayAsync<IssuedVisitDto>(scope, key, requestHash, cancellationToken);
-        if (replay.Conflict) return Problem(statusCode: 409, title: "This idempotency key was already used for another request.");
-        if (replay.Value is not null) return Ok(replay.Value);
-
-        var now = clock.GetUtcNow();
-        var clinicDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, ClinicTimeZone).DateTime);
-        var clinicDateValue = clinicDate.ToDateTime(TimeOnly.MinValue);
-        await db.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT IGNORE INTO `DailySequences` (`ClinicDate`, `LastSequence`) VALUES ({clinicDateValue}, 0)", cancellationToken);
-        var dailySequence = await db.DailySequences.FromSqlInterpolated(
-                $"SELECT * FROM `DailySequences` WHERE `ClinicDate` = {clinicDateValue} FOR UPDATE")
-            .SingleAsync(cancellationToken);
-        dailySequence.LastSequence++;
-
-        var visit = new Visit
-        {
-            ClinicDate = clinicDate,
-            Sequence = dailySequence.LastSequence,
-            VisitCode = dailySequence.LastSequence.ToString("D3", CultureInfo.InvariantCulture),
-            IssuedByUserId = userId.Value,
-            IssuedAtUtc = now
-        };
-        db.Visits.Add(visit);
-        await db.SaveChangesAsync(cancellationToken);
-
-        var step = new DepartmentStep
-        {
-            VisitId = visit.Id,
-            DepartmentId = request.InitialDepartmentId,
-            AppointmentAtUtc = appointmentAtUtc.Value,
-            State = DepartmentStepState.Pending,
-            EnteredAtUtc = now
-        };
-        db.DepartmentSteps.Add(step);
-        await db.SaveChangesAsync(cancellationToken);
-        visit.CurrentStepId = step.Id;
-        var dto = new IssuedVisitDto(visit.Id, visit.VisitCode, request.InitialDepartmentId, step.AppointmentAtUtc, visit.IssuedAtUtc);
-        SaveCommand(scope, key, requestHash, visit.Id, dto);
-        AddAudit("visit.issued", "visit", visit.Id);
-        AddOutbox(visit.Id, request.InitialDepartmentId);
-        await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return Created($"/api/v1/visits/{visit.Id}", dto);
-    }
-
-    [HttpGet("visits/{id:guid}")]
-    [Authorize(Policy = QueueRoles.Reception)]
-    public async Task<IActionResult> GetVisit(Guid id, CancellationToken cancellationToken)
-    {
-        var visit = await db.Visits.AsNoTracking().Include(item => item.CurrentStep)
-            .SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
-        return visit is null ? NotFound() : Ok(ToVisitDto(visit));
-    }
-
     [HttpGet("departments/{departmentId:guid}/queue")]
     [Authorize(Policy = QueueRoles.Staff)]
     public async Task<IActionResult> GetDepartmentQueue(Guid departmentId, CancellationToken cancellationToken)
@@ -140,16 +56,16 @@ public sealed class VisitCommandsController(QueueDbContext db, TimeProvider cloc
         [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
         CancellationToken cancellationToken)
     {
-        var key = ParseIdempotencyKey(idempotencyKey);
+        var key = VisitCommandSupport.ParseIdempotencyKey(idempotencyKey);
         if (key is null) return Problem(statusCode: 400, title: "A valid Idempotency-Key is required.");
         if (!await DepartmentScope.CanAccessAsync(User, departmentId, db, cancellationToken)) return Forbid();
 
-        var userId = CurrentUserId();
+        var userId = VisitCommandSupport.CurrentUserId(User);
         if (userId is null) return Unauthorized();
         var scope = $"queue.call:{userId}:{departmentId}";
         const string requestHash = "call-next";
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var replay = await FindReplayAsync<QueueVisitDto>(scope, key, requestHash, cancellationToken);
+        var replay = await VisitCommandSupport.FindReplayAsync<QueueVisitDto>(db, scope, key, requestHash, cancellationToken);
         if (replay.Conflict) return Problem(statusCode: 409, title: "This idempotency key was already used for another request.");
         if (replay.Value is not null) return Ok(replay.Value);
 
@@ -176,9 +92,9 @@ public sealed class VisitCommandsController(QueueDbContext db, TimeProvider cloc
         candidate.State = DepartmentStepState.Called;
         candidate.CalledAtUtc = now;
         var dto = new QueueVisitDto(visit.Id, visit.VisitCode, departmentId, nameof(DepartmentStepState.Called), candidate.AppointmentAtUtc, visit.IssuedAtUtc, now);
-        SaveCommand(scope, key, requestHash, candidate.Id, dto);
-        AddAudit("visit.called", "visit", visit.Id);
-        AddOutbox(visit.Id, departmentId);
+        VisitCommandSupport.SaveCommand(db, clock, scope, key, requestHash, candidate.Id, dto);
+        VisitCommandSupport.AddAudit(db, clock, userId, HttpContext.TraceIdentifier, "visit.called", "visit", visit.Id);
+        VisitCommandSupport.AddOutbox(db, clock, visit.Id, departmentId);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return Ok(dto);
@@ -191,14 +107,14 @@ public sealed class VisitCommandsController(QueueDbContext db, TimeProvider cloc
         [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
         CancellationToken cancellationToken)
     {
-        var key = ParseIdempotencyKey(idempotencyKey);
+        var key = VisitCommandSupport.ParseIdempotencyKey(idempotencyKey);
         if (key is null) return Problem(statusCode: 400, title: "A valid Idempotency-Key is required.");
-        var userId = CurrentUserId();
+        var userId = VisitCommandSupport.CurrentUserId(User);
         if (userId is null) return Unauthorized();
         const string requestHash = "return-to-pending";
         var scope = $"visit.no-show:{userId}:{id}";
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var replay = await FindReplayAsync<QueueVisitDto>(scope, key, requestHash, cancellationToken);
+        var replay = await VisitCommandSupport.FindReplayAsync<QueueVisitDto>(db, scope, key, requestHash, cancellationToken);
         if (replay.Conflict) return Problem(statusCode: 409, title: "This idempotency key was already used for another request.");
         if (replay.Value is not null) return Ok(replay.Value);
 
@@ -223,9 +139,9 @@ public sealed class VisitCommandsController(QueueDbContext db, TimeProvider cloc
         step.State = DepartmentStepState.Pending;
         step.CalledAtUtc = null;
         var dto = new QueueVisitDto(visit.Id, visit.VisitCode, step.DepartmentId, nameof(DepartmentStepState.Pending), step.AppointmentAtUtc, visit.IssuedAtUtc, null);
-        SaveCommand(scope, key, requestHash, step.Id, dto);
-        AddAudit("visit.returned-to-pending", "visit", visit.Id);
-        AddOutbox(visit.Id, step.DepartmentId);
+        VisitCommandSupport.SaveCommand(db, clock, scope, key, requestHash, step.Id, dto);
+        VisitCommandSupport.AddAudit(db, clock, userId, HttpContext.TraceIdentifier, "visit.returned-to-pending", "visit", visit.Id);
+        VisitCommandSupport.AddOutbox(db, clock, visit.Id, step.DepartmentId);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return Ok(dto);
@@ -239,20 +155,20 @@ public sealed class VisitCommandsController(QueueDbContext db, TimeProvider cloc
         [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
         CancellationToken cancellationToken)
     {
-        var key = ParseIdempotencyKey(idempotencyKey);
+        var key = VisitCommandSupport.ParseIdempotencyKey(idempotencyKey);
         if (key is null) return Problem(statusCode: 400, title: "A valid Idempotency-Key is required.");
-        var nextAppointmentAtUtc = ParseClinicLocalTime(request.NextDepartmentAppointmentAtLocal);
+        var nextAppointmentAtUtc = VisitCommandSupport.ParseClinicLocalTime(request.NextDepartmentAppointmentAtLocal);
         if (nextAppointmentAtUtc.IsInvalid)
         {
             return Problem(statusCode: 400, title: "Appointment time must use YYYY-MM-DDTHH:mm in the clinic timezone.");
         }
 
-        var userId = CurrentUserId();
+        var userId = VisitCommandSupport.CurrentUserId(User);
         if (userId is null) return Unauthorized();
-        var requestHash = Hash(JsonSerializer.Serialize(request));
+        var requestHash = VisitCommandSupport.Hash(JsonSerializer.Serialize(request));
         var scope = $"visit.complete:{userId}:{id}";
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var replay = await FindReplayAsync<CompleteVisitDto>(scope, key, requestHash, cancellationToken);
+        var replay = await VisitCommandSupport.FindReplayAsync<CompleteVisitDto>(db, scope, key, requestHash, cancellationToken);
         if (replay.Conflict) return Problem(statusCode: 409, title: "This idempotency key was already used for another request.");
         if (replay.Value is not null) return Ok(replay.Value);
 
@@ -264,14 +180,17 @@ public sealed class VisitCommandsController(QueueDbContext db, TimeProvider cloc
         {
             return Problem(statusCode: 409, title: "Only a currently called visit can be completed or forwarded.");
         }
-        if (request.NextDepartmentId is { } nextDepartmentId &&
-            !await db.Departments.AnyAsync(department => department.Id == nextDepartmentId && department.Active, cancellationToken))
+        var nextService = request.NextServiceId is { } nextServiceId
+            ? await db.Services.AsNoTracking().Where(service => service.Id == nextServiceId && service.Active && service.Department.Active)
+                .Select(service => new { service.Id, service.DepartmentId }).SingleOrDefaultAsync(cancellationToken)
+            : null;
+        if (request.NextServiceId.HasValue && nextService is null)
         {
-            return Problem(statusCode: 400, title: "Choose an active next department.");
+            return Problem(statusCode: 400, title: "Choose an active next service.");
         }
-        if (request.NextDepartmentId is null && request.NextDepartmentAppointmentAtLocal is not null)
+        if (request.NextServiceId is null && request.NextDepartmentAppointmentAtLocal is not null)
         {
-            return Problem(statusCode: 400, title: "A next-department appointment requires a next department.");
+            return Problem(statusCode: 400, title: "A next-service appointment requires a next service.");
         }
 
         var now = clock.GetUtcNow();
@@ -287,12 +206,13 @@ public sealed class VisitCommandsController(QueueDbContext db, TimeProvider cloc
         currentStep.State = DepartmentStepState.Completed;
         currentStep.CompletedAtUtc = now;
         Guid? nextStepId = null;
-        if (request.NextDepartmentId is { } destinationDepartmentId)
+        if (nextService is not null)
         {
             var nextStep = new DepartmentStep
             {
                 VisitId = visit.Id,
-                DepartmentId = destinationDepartmentId,
+                DepartmentId = nextService.DepartmentId,
+                ServiceId = nextService.Id,
                 AppointmentAtUtc = nextAppointmentAtUtc.Value,
                 State = DepartmentStepState.Pending,
                 EnteredAtUtc = now
@@ -308,72 +228,20 @@ public sealed class VisitCommandsController(QueueDbContext db, TimeProvider cloc
             visit.Completed = true;
         }
 
-        var dto = new CompleteVisitDto(visit.Id, visit.VisitCode, visit.Completed, request.NextDepartmentId);
-        SaveCommand(scope, key, requestHash, nextStepId ?? currentStep.Id, dto);
-        AddAudit(visit.Completed ? "visit.completed" : "visit.forwarded", "visit", visit.Id);
-        AddOutbox(visit.Id, currentStep.DepartmentId);
-        if (request.NextDepartmentId is { } nextId) AddOutbox(visit.Id, nextId);
+        var dto = new CompleteVisitDto(visit.Id, visit.VisitCode, visit.Completed, nextService?.DepartmentId, nextService?.Id);
+        VisitCommandSupport.SaveCommand(db, clock, scope, key, requestHash, nextStepId ?? currentStep.Id, dto);
+        VisitCommandSupport.AddAudit(db, clock, userId, HttpContext.TraceIdentifier, visit.Completed ? "visit.completed" : "visit.forwarded", "visit", visit.Id);
+        VisitCommandSupport.AddOutbox(db, clock, visit.Id, currentStep.DepartmentId);
+        if (nextService is not null) VisitCommandSupport.AddOutbox(db, clock, visit.Id, nextService.DepartmentId);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return Ok(dto);
     }
 
-    private async Task<(T? Value, bool Conflict)> FindReplayAsync<T>(string scope, string key, string requestHash, CancellationToken cancellationToken)
-    {
-        var keyHash = Hash(key);
-        var existing = await db.IdempotencyRecords.AsNoTracking()
-            .SingleOrDefaultAsync(record => record.Scope == scope && record.KeyHash == keyHash, cancellationToken);
-        if (existing is null) return (default, false);
-        if (existing.RequestHash != requestHash) return (default, true);
-        return (existing.ResponseJson is null ? default : JsonSerializer.Deserialize<T>(existing.ResponseJson), false);
-    }
-
-    private void SaveCommand<T>(string scope, string key, string requestHash, Guid resultId, T response) =>
-        db.IdempotencyRecords.Add(new IdempotencyRecord
-        {
-            Scope = scope,
-            KeyHash = Hash(key),
-            RequestHash = requestHash,
-            ResultId = resultId,
-            ResponseJson = JsonSerializer.Serialize(response),
-            CreatedAtUtc = clock.GetUtcNow()
-        });
-
-    private void AddAudit(string action, string type, Guid id) => db.AuditRecords.Add(new AuditRecord
-    {
-        ActorUserId = CurrentUserId(), Action = action, TargetType = type, TargetId = id,
-        OccurredAtUtc = clock.GetUtcNow(), CorrelationId = HttpContext.TraceIdentifier
-    });
-
-    private void AddOutbox(Guid aggregateId, Guid departmentId) => db.OutboxMessages.Add(new OutboxMessage
-    {
-        Type = "QueueChanged", AggregateId = aggregateId, DepartmentId = departmentId, CreatedAtUtc = clock.GetUtcNow()
-    });
-
-    private Guid? CurrentUserId() => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
-    private static string? ParseIdempotencyKey(string? key) => Guid.TryParse(key, out var parsed) && parsed != Guid.Empty ? parsed.ToString("N") : null;
-    private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
-
-    private static (DateTimeOffset? Value, bool IsInvalid) ParseClinicLocalTime(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return (null, false);
-        if (!DateTime.TryParseExact(value, "yyyy-MM-dd'T'HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var local))
-        {
-            return (null, true);
-        }
-        local = DateTime.SpecifyKind(local, DateTimeKind.Unspecified);
-        return (new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(local, ClinicTimeZone)), false);
-    }
-
-    private static VisitDto ToVisitDto(Visit visit) => new(
-        visit.Id, visit.VisitCode, visit.CurrentStep?.DepartmentId, visit.CurrentStep?.State.ToString(),
-        visit.CurrentStep?.AppointmentAtUtc, visit.IssuedAtUtc, visit.Completed);
 }
 
-public sealed record IssueVisitRequest(Guid InitialDepartmentId, string? AppointmentAtLocal);
-public sealed record CompleteVisitRequest(Guid? NextDepartmentId, string? NextDepartmentAppointmentAtLocal);
-public sealed record IssuedVisitDto(Guid Id, string VisitCode, Guid DepartmentId, DateTimeOffset? AppointmentAtUtc, DateTimeOffset IssuedAtUtc);
+public sealed record CompleteVisitRequest(Guid? NextServiceId, string? NextDepartmentAppointmentAtLocal);
 public sealed record VisitDto(Guid Id, string VisitCode, Guid? DepartmentId, string? Status, DateTimeOffset? AppointmentAtUtc, DateTimeOffset IssuedAtUtc, bool Completed);
 public sealed record QueueVisitDto(Guid Id, string VisitCode, Guid DepartmentId, string Status, DateTimeOffset? AppointmentAtUtc, DateTimeOffset IssuedAtUtc, DateTimeOffset? CalledAtUtc, bool IsEligible = true);
 public sealed record DepartmentQueueDto(string DepartmentName, QueueVisitDto[] Waiting, QueueVisitDto[] Called);
-public sealed record CompleteVisitDto(Guid Id, string VisitCode, bool Completed, Guid? NextDepartmentId);
+public sealed record CompleteVisitDto(Guid Id, string VisitCode, bool Completed, Guid? NextDepartmentId, Guid? NextServiceId);
