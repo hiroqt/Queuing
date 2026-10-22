@@ -24,6 +24,7 @@ public sealed class QueueDbContext(DbContextOptions<QueueDbContext> options)
     public DbSet<DailySequence> DailySequences => Set<DailySequence>();
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
     public DbSet<DisplayDevice> DisplayDevices => Set<DisplayDevice>();
+    public DbSet<KioskDevice> KioskDevices => Set<KioskDevice>();
     public DbSet<AuditRecord> AuditRecords => Set<AuditRecord>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
@@ -116,12 +117,19 @@ public sealed class QueueDbContext(DbContextOptions<QueueDbContext> options)
 
         builder.Entity<Visit>(entity =>
         {
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_Visits_ExactlyOneIssuer",
+                "(`IssuedByUserId` IS NOT NULL AND `IssuedByKioskDeviceId` IS NULL) OR (`IssuedByUserId` IS NULL AND `IssuedByKioskDeviceId` IS NOT NULL)"));
             entity.Property(visit => visit.ClinicDate).HasConversion(ClinicDateConverter).HasColumnType("date");
             entity.Property(visit => visit.VisitCode).HasMaxLength(12).IsRequired();
             entity.HasIndex(visit => new { visit.ClinicDate, visit.Sequence }).IsUnique();
             entity.HasOne(visit => visit.IssuedBy)
                 .WithMany()
                 .HasForeignKey(visit => visit.IssuedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(visit => visit.IssuedByKioskDevice)
+                .WithMany()
+                .HasForeignKey(visit => visit.IssuedByKioskDeviceId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(visit => visit.CurrentStep)
                 .WithOne()
@@ -137,6 +145,11 @@ public sealed class QueueDbContext(DbContextOptions<QueueDbContext> options)
             entity.HasOne(step => step.Department)
                 .WithMany()
                 .HasForeignKey(step => step.DepartmentId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(step => step.Service)
+                .WithMany()
+                .HasForeignKey(step => new { step.DepartmentId, step.ServiceId })
+                .HasPrincipalKey(service => new { service.DepartmentId, service.Id })
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(step => new { step.DepartmentId, step.State, step.AppointmentAtUtc, step.EnteredAtUtc });
             entity.Property(step => step.State).HasConversion<string>().HasMaxLength(20);
@@ -165,11 +178,21 @@ public sealed class QueueDbContext(DbContextOptions<QueueDbContext> options)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        builder.Entity<KioskDevice>(entity =>
+        {
+            entity.Property(device => device.Name).HasMaxLength(100).IsRequired();
+            entity.Property(device => device.PairingCodeHash).HasMaxLength(64);
+            entity.Property(device => device.CredentialHash).HasMaxLength(64);
+            entity.HasIndex(device => device.PairingCodeHash).IsUnique();
+            entity.HasIndex(device => device.CredentialHash).IsUnique();
+        });
+
         builder.Entity<AuditRecord>(entity =>
         {
             entity.Property(record => record.Action).HasMaxLength(80).IsRequired();
             entity.Property(record => record.TargetType).HasMaxLength(80).IsRequired();
             entity.Property(record => record.SafeDetails).HasMaxLength(500);
+            entity.HasOne<KioskDevice>().WithMany().HasForeignKey(record => record.ActorKioskDeviceId).OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<OutboxMessage>(entity =>
@@ -258,8 +281,10 @@ public sealed class Visit
     public int Sequence { get; set; }
     public string VisitCode { get; set; } = "";
     public bool Completed { get; set; }
-    public Guid IssuedByUserId { get; set; }
-    public QueueUser IssuedBy { get; set; } = null!;
+    public Guid? IssuedByUserId { get; set; }
+    public QueueUser? IssuedBy { get; set; }
+    public Guid? IssuedByKioskDeviceId { get; set; }
+    public KioskDevice? IssuedByKioskDevice { get; set; }
     public DateTimeOffset IssuedAtUtc { get; set; }
     public Guid? CurrentStepId { get; set; }
     public DepartmentStep? CurrentStep { get; set; }
@@ -273,6 +298,8 @@ public sealed class DepartmentStep
     public Visit Visit { get; set; } = null!;
     public Guid DepartmentId { get; set; }
     public Department Department { get; set; } = null!;
+    public Guid? ServiceId { get; set; }
+    public ClinicService? Service { get; set; }
     public DateTimeOffset? AppointmentAtUtc { get; set; }
     public DepartmentStepState State { get; set; }
     public DateTimeOffset EnteredAtUtc { get; set; }
@@ -304,10 +331,22 @@ public sealed class DisplayDevice
     public DateTimeOffset? PairedAtUtc { get; set; }
 }
 
+public sealed class KioskDevice
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Name { get; set; } = "";
+    public bool Active { get; set; } = true;
+    public string? PairingCodeHash { get; set; }
+    public DateTimeOffset? PairingExpiresAtUtc { get; set; }
+    public string? CredentialHash { get; set; }
+    public DateTimeOffset? PairedAtUtc { get; set; }
+}
+
 public sealed class AuditRecord
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid? ActorUserId { get; set; }
+    public Guid? ActorKioskDeviceId { get; set; }
     public string Action { get; set; } = "";
     public string TargetType { get; set; } = "";
     public Guid TargetId { get; set; }

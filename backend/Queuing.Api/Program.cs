@@ -57,14 +57,20 @@ builder.Services.ConfigureApplicationCookie(options =>
 
 builder.Services.AddAuthentication()
     .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, DisplayDeviceAuthHandler>(
-        DisplayDeviceAuthHandler.SchemeName, _ => { });
+        DisplayDeviceAuthHandler.SchemeName, _ => { })
+    .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, KioskDeviceAuthHandler>(
+        KioskDeviceAuthHandler.SchemeName, _ => { });
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy(QueueRoles.Admin, policy => policy.RequireRole(QueueRoles.Admin).RequireClaim("must_change_password", "false"));
     options.AddPolicy(QueueRoles.Reception, policy => policy.RequireRole(QueueRoles.Reception, QueueRoles.Admin).RequireClaim("must_change_password", "false"));
     options.AddPolicy(QueueRoles.Staff, policy => policy.RequireRole(QueueRoles.Staff, QueueRoles.Admin).RequireClaim("must_change_password", "false"));
+    options.AddPolicy(QueueRoles.QueueServices, policy => policy.RequireRole(QueueRoles.Admin, QueueRoles.Reception, QueueRoles.Staff).RequireClaim("must_change_password", "false"));
     options.AddPolicy("DisplayDevice", policy => policy
         .AddAuthenticationSchemes(DisplayDeviceAuthHandler.SchemeName)
+        .RequireAuthenticatedUser());
+    options.AddPolicy(QueueRoles.KioskDevicePolicy, policy => policy
+        .AddAuthenticationSchemes(KioskDeviceAuthHandler.SchemeName)
         .RequireAuthenticatedUser());
 });
 builder.Services.AddAntiforgery(options => options.HeaderName = "X-CSRF-TOKEN");
@@ -90,9 +96,18 @@ builder.Services.AddRateLimiter(options =>
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0
         }));
+    options.AddPolicy("kiosk-issue", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+        httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 20,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        }));
 });
 builder.Services.AddHealthChecks().AddCheck<QueueDatabaseHealthCheck>("mysql");
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<VisitIssuanceService>();
 builder.Services.AddHostedService<QueueOutboxDispatcher>();
 
 var app = builder.Build();
