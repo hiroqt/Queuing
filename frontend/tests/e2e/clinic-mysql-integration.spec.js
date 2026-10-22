@@ -3,6 +3,7 @@ import process from "node:process";
 import { expect, request, test } from "@playwright/test";
 
 const apiBaseUrl = "http://127.0.0.1:5271";
+const frontendBaseUrl = process.env.QUEUING_E2E_FRONTEND_URL ?? "http://127.0.0.1:4173";
 
 function clinicLocalDateTime(offsetMinutes = 0) {
   const date = new Date(Date.now() + offsetMinutes * 60_000);
@@ -72,6 +73,7 @@ test("MySQL API and browser preserve visit flow, authorization, and login-free d
   const anonymousSession = await localSetup.get("/api/v1/auth/session");
   expect((await anonymousSession.json()).authenticated).toBe(false);
   expect((await localSetup.get("/api/v1/admin/services")).status()).toBe(200);
+  expect((await localSetup.get("/api/v1/services/available")).status()).toBe(401);
   const localDepartment = await mutate(localSetup, "/api/v1/admin/departments", "POST", {
     name: `Local setup ${randomUUID().slice(0, 8)}`,
   });
@@ -115,6 +117,9 @@ test("MySQL API and browser preserve visit flow, authorization, and login-free d
     const xrayService = await createService(`X-ray imaging ${suffix}`, xray.id);
     const ecgService = await createService(`ECG test ${suffix}`, ecg.id);
     serviceIds.push(xrayService.id, ecgService.id);
+    const inactiveService = await createService(`Inactive imaging ${suffix}`, xray.id);
+    serviceIds.push(inactiveService.id);
+    expect((await mutate(admin, `/api/v1/admin/services/${inactiveService.id}`, "PATCH", { active: false })).status()).toBe(200);
     expect((await mutate(admin, "/api/v1/admin/services", "POST", {
       name: `X-ray imaging ${suffix}`,
       departmentId: xray.id,
@@ -206,31 +211,55 @@ test("MySQL API and browser preserve visit flow, authorization, and login-free d
     expect((await otherStaff.get(`/api/v1/departments/${xray.id}/queue`)).status()).toBe(403);
     expect((await otherStaff.get("/api/v1/admin/services")).status()).toBe(403);
     expect((await otherStaff.get("/api/v1/admin/stations")).status()).toBe(403);
-
-    const issue = async (departmentId, appointmentAtLocal, key = randomUUID()) => {
+    const staffServiceChoices = await otherStaff.get("/api/v1/services/available");
+    expect(staffServiceChoices.status()).toBe(200);
+    const staffServiceIds = (await staffServiceChoices.json()).map((service) => service.id);
+    expect(staffServiceIds).toEqual(expect.arrayContaining([xrayService.id, ecgService.id]));
+    expect(staffServiceIds).not.toContain(inactiveService.id);
+    const issue = async (serviceId, appointmentAtLocal, key = randomUUID()) => {
       const response = await mutate(reception, "/api/v1/visits", "POST", {
-        initialDepartmentId: departmentId,
+        initialServiceId: serviceId,
         appointmentAtLocal,
       }, { "Idempotency-Key": key });
       return { response, key };
     };
+    const inactiveIssue = await issue(inactiveService.id, null);
+    expect(inactiveIssue.response.status()).toBe(400);
     const futureKey = randomUUID();
     const futureAppointment = clinicLocalDateTime(30);
-    const future = await issue(xray.id, futureAppointment, futureKey);
+    const future = await issue(xrayService.id, futureAppointment, futureKey);
     expect(future.response.status()).toBe(201);
     const futureVisit = await future.response.json();
-    const replay = await issue(xray.id, futureAppointment, futureKey);
+    expect(futureVisit).toMatchObject({ serviceId: xrayService.id, departmentId: xray.id });
+    const replay = await issue(xrayService.id, futureAppointment, futureKey);
     expect(replay.response.status()).toBe(200);
     expect((await replay.response.json()).id).toBe(futureVisit.id);
-    const keyConflict = await issue(ecg.id, futureAppointment, futureKey);
+    expect((await mutate(admin, `/api/v1/admin/services/${xrayService.id}`, "PATCH", { active: false })).status()).toBe(200);
+    const replayAfterDeactivation = await issue(xrayService.id, futureAppointment, futureKey);
+    expect(replayAfterDeactivation.response.status()).toBe(200);
+    expect((await replayAfterDeactivation.response.json()).id).toBe(futureVisit.id);
+    expect((await mutate(admin, `/api/v1/admin/services/${xrayService.id}`, "PATCH", { active: true })).status()).toBe(200);
+    const keyConflict = await issue(ecgService.id, futureAppointment, futureKey);
     expect(keyConflict.response.status()).toBe(409);
-    const due = await issue(xray.id, clinicLocalDateTime(-5));
+    const concurrentKey = randomUUID();
+    const concurrentIssues = await Promise.all([
+      issue(xrayService.id, futureAppointment, concurrentKey),
+      issue(xrayService.id, futureAppointment, concurrentKey),
+    ]);
+    const concurrentIssueResults = await Promise.all(concurrentIssues.map(async ({ response }) => ({
+      status: response.status(),
+      body: await response.text(),
+    })));
+    expect(concurrentIssueResults.map(({ status }) => status).sort((left, right) => left - right), JSON.stringify(concurrentIssueResults)).toEqual([200, 201]);
+    const concurrentIssueBodies = concurrentIssueResults.map(({ body }) => JSON.parse(body));
+    expect(concurrentIssueBodies[0].id).toBe(concurrentIssueBodies[1].id);
+    const due = await issue(xrayService.id, clinicLocalDateTime(-5));
     expect(due.response.status()).toBe(201);
     const dueVisit = await due.response.json();
-    const walkIn = await issue(xray.id, null);
+    const walkIn = await issue(xrayService.id, null);
     expect(walkIn.response.status()).toBe(201);
     const walkInVisit = await walkIn.response.json();
-    const laterWalkIn = await issue(xray.id, null);
+    const laterWalkIn = await issue(xrayService.id, null);
     expect(laterWalkIn.response.status()).toBe(201);
     const laterWalkInVisit = await laterWalkIn.response.json();
 
@@ -246,12 +275,30 @@ test("MySQL API and browser preserve visit flow, authorization, and login-free d
     expect(recalled.status()).toBe(200);
     expect((await recalled.json()).visitCode).toBe(dueVisit.visitCode);
 
+    const inactiveForward = await mutate(staff, `/api/v1/visits/${dueVisit.id}/complete`, "POST", {
+      nextServiceId: inactiveService.id,
+    }, { "Idempotency-Key": randomUUID() });
+    expect(inactiveForward.status()).toBe(400);
+
     const forward = await mutate(staff, `/api/v1/visits/${dueVisit.id}/complete`, "POST", {
-      nextDepartmentId: ecg.id,
+      nextServiceId: ecgService.id,
       nextDepartmentAppointmentAtLocal: clinicLocalDateTime(-5),
     }, { "Idempotency-Key": randomUUID() });
     expect(forward.status()).toBe(200);
-    expect((await forward.json()).visitCode).toBe(dueVisit.visitCode);
+    expect(await forward.json()).toMatchObject({ visitCode: dueVisit.visitCode, nextDepartmentId: ecg.id, nextServiceId: ecgService.id });
+    const originalReceipt = await reception.get(`/api/v1/reception/visits/receipt?visitCode=${dueVisit.visitCode}&clinicDate=${dueVisit.clinicDate}`);
+    expect(originalReceipt.status()).toBe(200);
+    expect(await originalReceipt.json()).toMatchObject({
+      id: dueVisit.id,
+      visitCode: dueVisit.visitCode,
+      clinicDate: dueVisit.clinicDate,
+      serviceId: xrayService.id,
+      departmentId: xray.id,
+    });
+    const malformedReceipt = await reception.get(`/api/v1/reception/visits/receipt?visitCode=not-a-code&clinicDate=${dueVisit.clinicDate}`);
+    expect(malformedReceipt.status()).toBe(400);
+    const missingReceipt = await reception.get(`/api/v1/reception/visits/receipt?visitCode=99999&clinicDate=${dueVisit.clinicDate}`);
+    expect(missingReceipt.status()).toBe(404);
     const ecgCall = await mutate(staff, `/api/v1/departments/${ecg.id}/call-next`, "POST", undefined, { "Idempotency-Key": randomUUID() });
     expect(ecgCall.status()).toBe(200);
     expect((await ecgCall.json()).visitCode).toBe(dueVisit.visitCode);
@@ -284,10 +331,16 @@ test("MySQL API and browser preserve visit flow, authorization, and login-free d
     await page.getByLabel("Password").fill(receptionSession.password);
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL(/\/reception$/);
-    await page.getByLabel("First department").selectOption(xray.id);
+    await page.getByLabel("First service").selectOption(xrayService.id);
     await page.getByRole("button", { name: "Issue visit" }).click();
     const browserVisitCode = await page.locator(".receipt-number").textContent();
     expect(browserVisitCode).toMatch(/^\d{3,}$/);
+    const browserClinicDate = await page.getByLabel("Clinic date").inputValue();
+    await page.reload();
+    await page.getByRole("textbox", { name: "Visit code" }).fill(browserVisitCode);
+    await page.getByLabel("Clinic date").fill(browserClinicDate);
+    await page.getByRole("button", { name: "Find visit" }).click();
+    await expect(page.locator(".receipt-number")).toHaveText(browserVisitCode);
 
     const browserDisplayResponse = await mutate(admin, "/api/v1/admin/displays", "POST", {
       name: `Browser monitor ${suffix}`,
@@ -297,7 +350,7 @@ test("MySQL API and browser preserve visit flow, authorization, and login-free d
     browserDisplayId = (await browserDisplayResponse.json()).id;
     const browserPairingResponse = await mutate(admin, `/api/v1/admin/displays/${browserDisplayId}/pairing-code`, "POST");
     expect(browserPairingResponse.status()).toBe(200);
-    displayBrowserContext = await browser.newContext({ baseURL: "http://127.0.0.1:4173" });
+    displayBrowserContext = await browser.newContext({ baseURL: frontendBaseUrl });
     const displayPage = await displayBrowserContext.newPage();
     await displayPage.goto("/display/pair");
     await displayPage.getByLabel("Pairing code").fill((await browserPairingResponse.json()).code);
@@ -307,7 +360,7 @@ test("MySQL API and browser preserve visit flow, authorization, and login-free d
     await expect(displayPage.getByText(browserVisitCode, { exact: true })).toBeVisible();
     await expect(displayPage.getByText("Connection: connected")).toBeVisible();
 
-    browserStaffContext = await browser.newContext({ baseURL: "http://127.0.0.1:4173" });
+    browserStaffContext = await browser.newContext({ baseURL: frontendBaseUrl });
     const staffPage = await browserStaffContext.newPage();
     await staffPage.goto("/login");
     await staffPage.getByLabel("Username").fill(staffUser.userName);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { api, authApi, clearRequestToken, displaysApi, queueApi, refreshRequestToken, servicesApi, stationsApi } from "../../src/api/client.js";
+import { api, authApi, clearRequestToken, displaysApi, queueApi, refreshRequestToken, servicesApi, stationsApi, visitsApi } from "../../src/api/client.js";
 
 test("cookie-authenticated mutations obtain and send the antiforgery token", async () => {
   const originalFetch = globalThis.fetch;
@@ -93,17 +93,46 @@ test("queue transitions carry idempotency keys and only forward a supplied local
 
   try {
     await queueApi.returnToPending("visit-1", "retry-key-1");
-    await queueApi.complete("visit-2", "dept-next", "2026-10-20T09:30", "retry-key-2");
+    await queueApi.complete("visit-2", "service-next", "2026-10-20T09:30", "retry-key-2");
     await queueApi.complete("visit-3", null, null, "retry-key-3");
 
     assert.equal(requests[1].options.headers.get("Idempotency-Key"), "retry-key-1");
     assert.equal(requests[2].options.headers.get("Idempotency-Key"), "retry-key-2");
     assert.deepEqual(JSON.parse(requests[2].options.body), {
-      nextDepartmentId: "dept-next",
+      nextServiceId: "service-next",
       nextDepartmentAppointmentAtLocal: "2026-10-20T09:30",
     });
     assert.equal(requests[3].options.headers.get("Idempotency-Key"), "retry-key-3");
     assert.deepEqual(JSON.parse(requests[3].options.body), {});
+  } finally {
+    globalThis.fetch = originalFetch;
+    clearRequestToken();
+  }
+});
+
+test("visit operations use active services for issue and clinic-date receipt lookup", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (input, options) => {
+    requests.push({ url: String(input), options });
+    if (requests.length === 1) return new Response(JSON.stringify({ requestToken: "reception-token" }), { status: 200 });
+    return new Response(JSON.stringify([]), { status: 200 });
+  };
+  clearRequestToken();
+
+  try {
+    await servicesApi.available();
+    await visitsApi.issue({ initialServiceId: "service-xray", appointmentAtLocal: "2026-10-21T09:30" }, "issue-key");
+    await visitsApi.receipt("001", "2026-10-21");
+
+    assert.equal(requests[0].url, "/api/v1/services/available");
+    assert.equal(requests[1].url, "/api/v1/visits");
+    assert.equal(requests[1].options.headers.get("Idempotency-Key"), "issue-key");
+    assert.deepEqual(JSON.parse(requests[1].options.body), {
+      initialServiceId: "service-xray",
+      appointmentAtLocal: "2026-10-21T09:30",
+    });
+    assert.equal(requests[2].url, "/api/v1/reception/visits/receipt?visitCode=001&clinicDate=2026-10-21");
   } finally {
     globalThis.fetch = originalFetch;
     clearRequestToken();

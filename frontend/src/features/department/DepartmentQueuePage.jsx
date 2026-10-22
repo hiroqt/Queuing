@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { departmentApi, queueApi } from "../../api/client.js";
+import { departmentApi, queueApi, servicesApi } from "../../api/client.js";
 import { useAuth } from "../../auth/useAuth.js";
 
 const EMPTY_DEPARTMENT_IDS = [];
@@ -12,6 +12,7 @@ export default function DepartmentQueuePage() {
   const { user } = useAuth();
   const assignedIds = user.departmentIds ?? EMPTY_DEPARTMENT_IDS;
   const [departments, setDepartments] = useState([]);
+  const [services, setServices] = useState([]);
   const [departmentId, setDepartmentId] = useState(assignedIds[0] ?? "");
   const [snapshot, setSnapshot] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -23,9 +24,10 @@ export default function DepartmentQueuePage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    Promise.resolve().then(() => departmentApi.list(controller.signal)).then((items) => {
+    Promise.resolve().then(() => Promise.all([departmentApi.list(controller.signal), servicesApi.available(controller.signal)])).then(([items, serviceItems]) => {
       const active = items.filter((item) => item.active !== false);
       setDepartments(active);
+      setServices(serviceItems.filter((item) => item.active !== false));
       const allowed = active.filter((item) => assignedIds.includes(item.id));
       setDepartmentId((current) => allowed.some((item) => item.id === current) ? current : allowed[0]?.id ?? "");
     }).catch((cause) => {
@@ -91,12 +93,12 @@ export default function DepartmentQueuePage() {
   async function complete(event, visit) {
     event.preventDefault();
     const options = forwardOptions[visit.id] ?? {};
-    const nextDepartmentId = options.nextDepartmentId || null;
+    const nextServiceId = options.nextServiceId || null;
     const appointmentAtLocal = options.appointmentAtLocal || null;
-    const signature = `complete:${visit.id}:${nextDepartmentId ?? ""}:${appointmentAtLocal ?? ""}`;
+    const signature = `complete:${visit.id}:${nextServiceId ?? ""}:${appointmentAtLocal ?? ""}`;
     await mutate(
-      () => queueApi.complete(visit.id, nextDepartmentId, appointmentAtLocal, idempotencyKey(signature)),
-      nextDepartmentId ? `${visit.visitCode} forwarded.` : `${visit.visitCode} completed.`,
+      () => queueApi.complete(visit.id, nextServiceId, appointmentAtLocal, idempotencyKey(signature)),
+      nextServiceId ? `${visit.visitCode} forwarded.` : `${visit.visitCode} completed.`,
       signature,
     );
   }
@@ -120,8 +122,8 @@ export default function DepartmentQueuePage() {
           <section className="queue-section" aria-labelledby="waiting-heading"><div className="section-heading"><div><p className="eyebrow">AUTHORIZED SNAPSHOT</p><h2 id="waiting-heading">Waiting visits</h2></div><span className="count-label"><strong>{waiting.length.toString().padStart(2, "0")}</strong> waiting</span></div><div className="queue-table-wrap"><table className="queue-table"><caption className="visually-hidden">Waiting visits in assigned department</caption><thead><tr><th scope="col">Visit code</th><th scope="col">Appointment</th><th scope="col">Issued</th></tr></thead><tbody>{waiting.length ? waiting.map((visit) => <tr key={visit.id}><th scope="row"><span className="ticket-number">{visit.visitCode}</span></th><td>{clinicTime(visit.appointmentAtUtc)}</td><td>{clinicTime(visit.issuedAtUtc)}</td></tr>) : <tr><td className="empty-queue" colSpan="3">{loading ? "Loading visits…" : "No visits are waiting."}</td></tr>}</tbody></table></div></section>
         </div>
         <aside className="staff-aside" aria-label="Currently called visits"><section className="detail-panel"><p className="eyebrow">CALLS IN THIS DEPARTMENT</p>{called.length === 0 && <p className="panel-description">No active calls.</p>}{called.map((visit) => {
-          const options = forwardOptions[visit.id] ?? { nextDepartmentId: "", appointmentAtLocal: "" };
-          return <article className="called-visit" key={visit.id}><strong>{visit.visitCode}</strong><span>{clinicTime(visit.appointmentAtUtc)}</span><button className="text-button" type="button" disabled={pending} onClick={() => returnToPending(visit)}>Return no-show to pending</button><form onSubmit={(event) => complete(event, visit)}><label htmlFor={`next-${visit.id}`}>Forward to department</label><select id={`next-${visit.id}`} value={options.nextDepartmentId} onChange={(event) => setForwardOptions((current) => ({ ...current, [visit.id]: { ...current[visit.id], nextDepartmentId: event.target.value, appointmentAtLocal: event.target.value ? current[visit.id]?.appointmentAtLocal ?? "" : "" } }))}><option value="">Complete visit</option>{departments.filter((department) => department.id !== departmentId && department.active).map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select><label htmlFor={`appointment-${visit.id}`}>Next department appointment (optional)</label><input id={`appointment-${visit.id}`} type="datetime-local" value={options.appointmentAtLocal} disabled={!options.nextDepartmentId} aria-describedby={`appointment-help-${visit.id}`} onChange={(event) => setForwardOptions((current) => ({ ...current, [visit.id]: { ...current[visit.id], appointmentAtLocal: event.target.value } }))} /><span id={`appointment-help-${visit.id}`} className="panel-description">Clinic local time (Asia/Manila); blank keeps it as a walk-in.</span><button className="button button-dark" type="submit" disabled={pending}>{pending ? "Saving…" : "Complete / forward"}</button></form></article>;
+          const options = forwardOptions[visit.id] ?? { nextServiceId: "", appointmentAtLocal: "" };
+          return <article className="called-visit" key={visit.id}><strong>{visit.visitCode}</strong><span>{clinicTime(visit.appointmentAtUtc)}</span><button className="text-button" type="button" disabled={pending} onClick={() => returnToPending(visit)}>Return no-show to pending</button><form onSubmit={(event) => complete(event, visit)}><label htmlFor={`next-${visit.id}`}>Forward to service</label><select id={`next-${visit.id}`} value={options.nextServiceId} onChange={(event) => setForwardOptions((current) => ({ ...current, [visit.id]: { ...current[visit.id], nextServiceId: event.target.value, appointmentAtLocal: event.target.value ? current[visit.id]?.appointmentAtLocal ?? "" : "" } }))}><option value="">Complete visit</option>{services.filter((service) => service.departmentId !== departmentId).map((service) => <option key={service.id} value={service.id}>{service.departmentName} · {service.name}</option>)}</select><label htmlFor={`appointment-${visit.id}`}>Next service appointment (optional)</label><input id={`appointment-${visit.id}`} type="datetime-local" value={options.appointmentAtLocal} disabled={!options.nextServiceId} aria-describedby={`appointment-help-${visit.id}`} onChange={(event) => setForwardOptions((current) => ({ ...current, [visit.id]: { ...current[visit.id], appointmentAtLocal: event.target.value } }))} /><span id={`appointment-help-${visit.id}`} className="panel-description">Clinic local time (Asia/Manila); blank keeps it as a walk-in.</span><button className="button button-dark" type="submit" disabled={pending}>{pending ? "Saving…" : "Complete / forward"}</button></form></article>;
         })}</section></aside>
       </div>
     </section>

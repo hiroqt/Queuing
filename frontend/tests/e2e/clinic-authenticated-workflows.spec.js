@@ -1,11 +1,15 @@
 import { expect, test } from "@playwright/test";
 
-async function mockApi(page, initialRole = null, forcePasswordChange = false) {
+async function mockApi(page, initialRole = null, forcePasswordChange = false, options = {}) {
   let role = initialRole;
   let mustChangePassword = false;
   const departments = [
     { id: "dept-xray", name: "X-ray", active: true },
     { id: "dept-ecg", name: "ECG", active: true },
+  ];
+  const availableServices = options.availableServices ?? [
+    { id: "service-xray", name: "Imaging", departmentId: "dept-xray", departmentName: "X-ray", active: true },
+    { id: "service-ecg", name: "ECG test", departmentId: "dept-ecg", departmentName: "ECG", active: true },
   ];
   const users = [];
   const displays = [];
@@ -22,7 +26,7 @@ async function mockApi(page, initialRole = null, forcePasswordChange = false) {
     const path = url.pathname.replace("/api/v1", "");
     const method = request.method();
     const body = request.postDataJSON?.() ?? {};
-    requests.push({ path, method, headers: request.headers(), body });
+    requests.push({ path, query: url.search, method, headers: request.headers(), body });
     const json = (payload, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(payload) });
 
     if (path === "/auth/csrf" && method === "GET") return json({ requestToken: "test-token" });
@@ -33,6 +37,10 @@ async function mockApi(page, initialRole = null, forcePasswordChange = false) {
     if (path === "/auth/logout" && method === "POST") { role = null; return route.fulfill({ status: 204 }); }
     if (path === "/auth/change-password" && method === "POST") { mustChangePassword = false; return route.fulfill({ status: 204 }); }
     if (path === "/departments" && method === "GET") return json(departments);
+    if (path === "/services/available" && method === "GET") {
+      if (options.serviceLoadError) return route.fulfill({ status: 503, contentType: "application/problem+json", body: JSON.stringify({ detail: "Service choices are temporarily unavailable." }) });
+      return json(availableServices);
+    }
     if (path === "/admin/departments" && method === "GET") return json(departments);
     if (path === "/admin/departments" && method === "POST") {
       const created = { id: "dept-new", name: body.name, active: true };
@@ -115,8 +123,11 @@ async function mockApi(page, initialRole = null, forcePasswordChange = false) {
       if (index >= 0) called.splice(index, 1);
       return route.fulfill({ status: 204 });
     }
-    if (path === "/visits" && method === "POST") return json({ id: "visit-new", visitCode: "Q-003", departmentId: body.initialDepartmentId, appointmentAtUtc: null, issuedAtUtc: "2026-10-20T00:00:00Z" }, 201);
-    if (path === "/visits/visit-new" && method === "GET") return json({ id: "visit-new", visitCode: "Q-003", departmentId: "dept-xray", issuedAtUtc: "2026-10-20T00:00:00Z" });
+    if (path === "/visits" && method === "POST") {
+      const service = availableServices.find((item) => item.id === body.initialServiceId);
+      return json({ id: "visit-new", visitCode: "003", clinicDate: "2026-10-21", serviceId: service.id, serviceName: service.name, departmentId: service.departmentId, departmentName: service.departmentName, appointmentAtUtc: null, issuedAtUtc: "2026-10-20T00:00:00Z" }, 201);
+    }
+    if (path === "/reception/visits/receipt" && method === "GET") return json({ id: "visit-new", visitCode: url.searchParams.get("visitCode"), clinicDate: url.searchParams.get("clinicDate"), serviceId: "service-xray", serviceName: "Imaging", departmentId: "dept-xray", departmentName: "X-ray", issuedAtUtc: "2026-10-20T00:00:00Z" });
     return route.fulfill({ status: 404, contentType: "application/problem+json", body: JSON.stringify({ detail: `Unhandled mock route: ${method} ${path}` }) });
   });
   return { requests, departments };
@@ -202,7 +213,7 @@ test("admin can configure each section through the sidebar and sees only the sel
   await page.getByRole("button", { name: "Save station" }).click();
   const stationRegion = page.getByRole("region", { name: "Stations" });
   await expect(stationRegion.getByText("Window 1", { exact: true })).toBeVisible();
-  await expect(stationRegion.getByText("X-ray Imaging", { exact: true })).toBeVisible();
+  await expect(stationRegion.locator(".admin-record-summary")).toContainText("X-ray Imaging");
   await expect(stationRegion.getByText("new-staff", { exact: true })).toBeVisible();
   const savedStationForm = stationRegion.locator(".admin-record form");
   await stationRegion.getByRole("button", { name: "Edit station" }).click();
@@ -252,36 +263,54 @@ test("admin can configure each section through the sidebar and sees only the sel
   await expect(page.getByRole("region", { name: "Stations" })).toHaveCount(0);
 });
 
-test("reception issues an Asia/Manila appointment, prints its stable code, and can look it up", async ({ page }) => {
+test("reception issues a service-linked Asia/Manila appointment and reprints by clinic date and visit code", async ({ page }) => {
   const { requests } = await mockApi(page, "Reception");
   await page.addInitScript(() => { window.print = () => { window.printRequested = true; }; });
   await page.goto("/reception");
   await expect(page.getByRole("heading", { name: "Issue a visit" })).toBeVisible();
   await page.getByLabel("Appointment time Optional").fill("2026-10-20T09:30");
   await page.getByRole("button", { name: "Issue visit" }).click();
-  await expect(page.getByText("Q-003", { exact: true })).toBeVisible();
+  await expect(page.getByText("003", { exact: true })).toBeVisible();
   const issued = requests.find((entry) => entry.path === "/visits" && entry.method === "POST");
-  expect(issued.body).toEqual({ initialDepartmentId: "dept-xray", appointmentAtLocal: "2026-10-20T09:30" });
+  expect(issued.body).toEqual({ initialServiceId: "service-xray", appointmentAtLocal: "2026-10-20T09:30" });
   expect(issued.headers["idempotency-key"]).toBeTruthy();
   await page.getByRole("button", { name: "Print / reprint" }).click();
   await expect.poll(() => page.evaluate(() => window.printRequested)).toBe(true);
-  await page.getByLabel("Reprint an existing visit by ID").fill("visit-new");
+  await page.getByRole("textbox", { name: "Visit code" }).fill("003");
+  await page.getByLabel("Clinic date").fill("2026-10-21");
   await page.getByRole("button", { name: "Find visit" }).click();
-  await expect(page.getByText("Q-003", { exact: true })).toBeVisible();
+  await expect(page.getByText("003", { exact: true })).toBeVisible();
+  const receiptLookup = requests.find((entry) => entry.path.startsWith("/reception/visits/receipt"));
+  expect(receiptLookup).toMatchObject({ path: "/reception/visits/receipt", query: "?visitCode=003&clinicDate=2026-10-21" });
+});
+
+test("reception explains when no active services are configured", async ({ page }) => {
+  await mockApi(page, "Reception", false, { availableServices: [] });
+  await page.goto("/reception");
+  await expect(page.getByText("No active services are available.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Issue visit" })).toBeDisabled();
+});
+
+test("reception reports service-choice loading failures", async ({ page }) => {
+  await mockApi(page, "Reception", false, { serviceLoadError: true });
+  await page.goto("/reception");
+  await expect(page.getByRole("alert")).toContainText("Service choices are temporarily unavailable.");
+  await expect(page.getByRole("button", { name: "Issue visit" })).toBeDisabled();
 });
 
 test("assigned staff can call, return a no-show, and complete a visit", async ({ page }) => {
-  await mockApi(page, "Staff");
+  const { requests } = await mockApi(page, "Staff");
   await page.goto("/department");
   await expect(page.getByRole("heading", { name: "Department queue" })).toBeVisible();
   await page.getByRole("button", { name: "Call next" }).click();
-  await expect(page.getByRole("status")).toContainText("Now calling Q-002");
+  await expect(page.locator(".action-message[role='status']")).toContainText("Now calling Q-002");
   await page.getByRole("button", { name: "Return no-show to pending" }).first().click();
   await expect(page.getByText("Q-002 returned to pending.", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Call next" }).click();
-  await page.getByLabel("Forward to department").selectOption("dept-ecg");
+  await page.getByLabel("Forward to service").selectOption("service-ecg");
   await page.getByRole("button", { name: "Complete / forward" }).first().click();
   await expect(page.getByText("Q-002 forwarded", { exact: false })).toBeVisible();
+  expect(requests.find((entry) => entry.path === "/visits/visit-2/complete").body).toEqual({ nextServiceId: "service-ecg" });
 });
 
 test("paired display uses its device session without requiring staff sign-in", async ({ page }) => {

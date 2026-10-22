@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router";
 import { authApi, clearRequestToken } from "../api/client.js";
 import { AuthContext } from "./AuthContext.js";
 
@@ -6,9 +7,12 @@ const localSetupMode = import.meta.env.DEV && import.meta.env.VITE_LOCAL_SETUP_M
 const localSetupUser = { userName: "Local setup", role: "Admin", departmentIds: [], mustChangePassword: false };
 
 export function AuthProvider({ children }) {
+  const { pathname } = useLocation();
   const [session, setSession] = useState(() => localSetupMode
     ? { loading: false, authenticated: true, user: localSetupUser, error: "" }
     : { loading: true, authenticated: false, user: null, error: "" });
+  const localSetupPath = pathname.replace(/\/+$/, "");
+  const localSetupRole = localSetupPath === "/reception" ? "Reception" : localSetupPath === "/department" ? "Staff" : "Admin";
 
   const refresh = useCallback(async (signal) => {
     if (localSetupMode) return localSetupUser;
@@ -51,6 +55,14 @@ export function AuthProvider({ children }) {
     setSession({ loading: false, authenticated: false, user: null, error: "" });
   }, []);
 
-  const value = useMemo(() => ({ ...session, localSetupMode, login, logout, changePassword, refresh }), [session, login, logout, changePassword, refresh]);
+  const value = useMemo(() => ({
+    ...session,
+    user: localSetupMode ? { ...localSetupUser, role: localSetupRole } : session.user,
+    localSetupMode,
+    login,
+    logout,
+    changePassword,
+    refresh,
+  }), [session, localSetupRole, login, logout, changePassword, refresh]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

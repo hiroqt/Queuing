@@ -83,6 +83,7 @@ export const usersApi = {
 };
 
 export const servicesApi = {
+  available: (signal) => api("/services/available", { signal }),
   list: (signal) => api("/admin/services", { signal }),
   create: (service) => api("/admin/services", { method: "POST", body: JSON.stringify(service) }),
   update: (id, changes) => api(`/admin/services/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(changes) }),
@@ -107,6 +108,24 @@ export const displaysApi = {
   snapshot: (signal) => api("/displays/me/snapshot", { signal }),
 };
 
+export const kiosksApi = {
+  list: (signal) => api("/admin/kiosks", { signal }),
+  create: (kiosk) => api("/admin/kiosks", { method: "POST", body: JSON.stringify(kiosk) }),
+  update: (id, changes) => api(`/admin/kiosks/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(changes) }),
+  pairingCode: (id) => api(`/admin/kiosks/${encodeURIComponent(id)}/pairing-code`, { method: "POST" }),
+};
+
+export const kioskApi = {
+  choices: (signal) => api("/kiosk/choices", { signal }),
+  issue: (visit, key) => api("/kiosk/visits", {
+    method: "POST",
+    headers: { "Idempotency-Key": key },
+    body: JSON.stringify(visit),
+  }),
+  activate: (code) => api("/kiosks/activate", { method: "POST", body: JSON.stringify({ code }) }),
+  logout: () => api("/kiosk/logout", { method: "POST" }),
+};
+
 export const visitsApi = {
   issue: (visit, key) => api("/visits", {
     method: "POST",
@@ -114,6 +133,10 @@ export const visitsApi = {
     body: JSON.stringify(visit),
   }),
   get: (id, signal) => api(`/visits/${encodeURIComponent(id)}`, { signal }),
+  receipt: (visitCode, clinicDate, signal) => {
+    const query = new URLSearchParams({ visitCode, clinicDate });
+    return api(`/reception/visits/receipt?${query}`, { signal });
+  },
 };
 
 export const queueApi = {
@@ -126,10 +149,10 @@ export const queueApi = {
     method: "POST",
     headers: { "Idempotency-Key": idempotencyKey },
   }),
-  complete: (visitId, nextDepartmentId, nextDepartmentAppointmentAtLocal, idempotencyKey) => {
+  complete: (visitId, nextServiceId, nextDepartmentAppointmentAtLocal, idempotencyKey) => {
     const body = {};
-    if (nextDepartmentId) body.nextDepartmentId = nextDepartmentId;
-    if (nextDepartmentId && nextDepartmentAppointmentAtLocal) body.nextDepartmentAppointmentAtLocal = nextDepartmentAppointmentAtLocal;
+    if (nextServiceId) body.nextServiceId = nextServiceId;
+    if (nextServiceId && nextDepartmentAppointmentAtLocal) body.nextDepartmentAppointmentAtLocal = nextDepartmentAppointmentAtLocal;
     return api(`/visits/${encodeURIComponent(visitId)}/complete`, {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },

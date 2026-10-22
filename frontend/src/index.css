@@ -204,11 +204,32 @@ input, select { width: 100%; min-height: 43px; padding: 0 11px; border: 1px soli
 input::placeholder { color: #8b9691; }
 form .button { justify-self: start; margin-top: 4px; }
 
-.ticket-layout { display: grid; grid-template-columns: minmax(240px, .8fr) minmax(290px, 1.2fr); gap: 22px; align-items: start; }
-.issue-panel h2 { margin: 7px 0 0; font-size: 21px; }
-.issue-panel form { margin-top: 25px; }
-.ticket-preview-area { min-width: 0; }
-.ticket-preview-area > .section-heading { margin-bottom: 13px; }
+.reception-page > .page-heading { align-items: center; margin-top: 25px; margin-bottom: 23px; }
+.reception-numbering { display: grid; min-width: 265px; gap: 5px; padding: 13px 17px; border-left: 3px solid var(--amber); border-radius: 4px; background: #fffdf7; }
+.reception-numbering strong { color: var(--ink); font-size: 13px; }
+.reception-numbering > span:last-child { color: var(--muted); font-size: 10px; }
+.reception-feedback { margin: 0 0 17px; border-left-color: #a84c3f; background: #fff1ed; color: #713a32; }
+.reception-feedback-success { border-left-color: #477559; background: #edf5ee; color: #315541; }
+.reception-workspace { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(330px, .85fr); align-items: start; gap: 18px; }
+.reception-issue-panel { padding: 24px; }
+.reception-panel-heading { display: flex; align-items: flex-start; gap: 13px; }
+.reception-step { display: grid; width: 36px; height: 36px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: #edf3ee; color: var(--evergreen); font-size: 11px; font-weight: 750; }
+.reception-panel-heading h2 { margin: 5px 0 0; font-size: 20px; font-weight: 650; letter-spacing: -.035em; }
+.reception-panel-heading .panel-description { max-width: 490px; margin-top: 6px; }
+.reception-issue-form { gap: 19px; margin-top: 26px; }
+.reception-field { display: grid; min-width: 0; gap: 7px; }
+.reception-field label { color: #455752; font-size: 11px; font-weight: 650; }
+.reception-issue-button { width: 100%; min-height: 49px; margin-top: 0 !important; font-size: 13px; }
+.reception-empty-services { margin: -4px 0 0; padding: 10px 12px; border-left: 2px solid var(--amber); background: #fff8e8; color: #574924; font-size: 11px; line-height: 1.5; }
+.reception-side { display: grid; gap: 15px; min-width: 0; }
+.reception-ticket-panel, .reception-lookup-panel { min-width: 0; padding: 19px; }
+.reception-panel-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.reception-panel-title h2 { margin: 4px 0 0; font-size: 18px; font-weight: 650; letter-spacing: -.035em; }
+.reception-issued-tag { padding: 5px 8px; border-radius: 3px; background: #edf3ee; color: #3f6652; font-size: 9px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
+.reception-ticket-empty { display: grid; min-height: 190px; align-content: center; justify-items: center; gap: 7px; margin-top: 15px; padding: 22px; border: 1px dashed #cbd4cd; border-radius: 5px; background: #fbfcf9; text-align: center; }
+.reception-ticket-empty > span { color: #a4b0a9; font-family: Georgia, "Times New Roman", serif; font-size: 27px; letter-spacing: .12em; }
+.reception-ticket-empty strong { color: var(--ink); font-size: 12px; }
+.reception-ticket-empty p { max-width: 250px; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
 .paper-ticket { position: relative; width: min(100%, 350px); margin: 0 auto; padding: 23px 25px 20px; border: 1px solid #d7d5ca; background: #fffdf7; box-shadow: 0 8px 22px #283a3210; text-align: center; }
 .paper-ticket::before, .paper-ticket::after { position: absolute; right: -5px; left: -5px; height: 10px; background: radial-gradient(circle at 5px 5px, var(--canvas) 4px, transparent 4.5px) repeat-x; background-size: 12px 10px; content: ""; }
 .paper-ticket::before { top: -5px; }
@@ -258,12 +279,12 @@ form .button { justify-self: start; margin-top: 4px; }
 .dashboard-board .board-note { margin: 5px 0 8px; color: #cfdbd2; font-size: 10px; }
 .dashboard-board .board-calling { padding-top: 20px; }
 .dashboard-board .board-footer { padding-right: 24px; padding-left: 24px; }
-.dashboard-receipt { margin-top: 23px; padding: 17px; border: 1px solid var(--line); border-radius: 6px; background: #fffdf7; text-align: center; }
+.dashboard-receipt { margin: 15px 0 0; padding: 18px; border: 1px solid #e6e2d5; border-radius: 5px; background: #fffdf7; text-align: center; }
 .receipt-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; }
 .receipt-heading h2 { margin-top: 4px; font-size: 16px; }
 .receipt-heading .button { min-height: 38px; }
 .receipt-clinic { margin: 18px 0 5px; color: #596960; font-size: 9px; font-weight: 750; letter-spacing: .12em; }
-.receipt-number { margin: 0; color: var(--evergreen); font-family: Georgia, "Times New Roman", serif; font-size: 56px; font-variant-numeric: tabular-nums; letter-spacing: -.04em; line-height: 1.1; }
+.receipt-number { margin: 0; color: var(--evergreen); font-family: Georgia, "Times New Roman", serif; font-size: clamp(50px, 5vw, 64px); font-variant-numeric: tabular-nums; letter-spacing: -.04em; line-height: 1.1; }
 .receipt-service { margin: 5px 0; font-family: Georgia, "Times New Roman", serif; font-size: 20px; }
 .receipt-time, .receipt-note { color: #586963; font-size: 11px; }
 .receipt-note { margin: 16px 0 0; padding-top: 13px; border-top: 1px dashed #c8c9bd; }
@@ -294,8 +315,10 @@ form .button { justify-self: start; margin-top: 4px; }
 input[type="checkbox"] { width: 18px; min-height: 18px; margin: 0; accent-color: var(--evergreen); }
 .optional-label { color: var(--muted); font-weight: 400; }
 .field-hint { margin: -3px 0 3px; color: var(--muted); font-size: 11px; line-height: 1.45; }
-.lookup-form { margin-top: 25px; padding-top: 17px; border-top: 1px solid var(--line); }
-.lookup-form .button { justify-self: start; }
+.reception-lookup-panel > .panel-description { margin-top: 6px; }
+.lookup-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px 12px; margin-top: 15px; padding-top: 0; }
+.reception-find-button { width: 100%; min-height: 43px; grid-column: 1 / -1; margin-top: 1px !important; border-color: #9bac9f; background: #fff; color: var(--evergreen); }
+.reception-find-button:hover { background: #f1f5f1; }
 .department-picker { display: flex; max-width: 480px; align-items: center; gap: 14px; margin: 0 0 22px; }
 .department-picker label { flex: 0 0 auto; font-size: 12px; font-weight: 650; }
 .called-visit { display: grid; gap: 9px; padding: 14px 0; border-top: 1px solid #edf0ec; }
@@ -393,7 +416,6 @@ input[type="checkbox"] { width: 18px; min-height: 18px; margin: 0; accent-color:
   .page-content { padding: 17px 18px 36px; }
   .page-heading { align-items: flex-start; flex-direction: column; margin: 25px 0 20px; }
   .page-heading h1 { font-size: 30px; }
-  .ticket-layout { grid-template-columns: minmax(0, 1fr); }
   .admin-form-panel { grid-template-columns: minmax(0, 1fr); }
   .current-call { min-height: 0; padding: 22px 20px; }
   .current-call h2 { font-size: 58px; }
@@ -406,12 +428,25 @@ input[type="checkbox"] { width: 18px; min-height: 18px; margin: 0; accent-color:
   .board-footer { padding-right: 20px; padding-left: 20px; }
 }
 
+@media (max-width: 980px) {
+  .reception-workspace { grid-template-columns: minmax(0, 1fr); }
+  .reception-side { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .reception-side { grid-template-columns: minmax(0, 1fr); }
+  .reception-numbering { width: 100%; min-width: 0; }
+}
+
 @media (max-width: 460px) {
   .breadcrumb { gap: 6px; font-size: 10px; }
   .demo-badge { padding: 5px 6px; font-size: 8px; }
   .page-content { padding-right: 14px; padding-left: 14px; }
   .demo-notice { padding: 10px; }
   .staff-aside { grid-template-columns: minmax(0, 1fr); }
+  .reception-issue-panel, .reception-ticket-panel, .reception-lookup-panel { padding: 16px; }
+  .lookup-form { grid-template-columns: minmax(0, 1fr); }
+  .reception-find-button { grid-column: auto; }
   .queue-table th, .queue-table td { padding: 11px 8px; font-size: 10px; }
   .queue-table thead th { font-size: 8px; }
   .queue-table th:first-child, .queue-table td:first-child { padding-left: 10px; }
