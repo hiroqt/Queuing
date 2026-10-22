@@ -28,9 +28,10 @@ Manual calls and inflexible ticket numbers lead to confusion, duplicate calls, a
 | FR-08 | Staff print/reprint persisted ticket; prevent accidental duplicate issuance | Reprint same ID, logged and identifiable |
 | FR-09 | Display now-serving items in real time using SignalR and snapshot reload | Reconnect recovers current state after missed event |
 | FR-10 | Audit config, authorization-relevant changes and ticket lifecycle | Admin can trace who did what and when |
-| FR-11 | Admin/staff responsive desktop-first screens and accessible controls | Keyboard interaction, visible loading/error states |
+| FR-11 | Admin/staff responsive desktop-first screens and accessible controls; patient kiosk adapts from small screens to touch kiosks | Keyboard interaction, large touch targets, visible loading/error states |
 | FR-12 | Deactivate rather than delete referenced configuration | Historical ticket remains readable |
 | FR-13 | Configurable clinic timezone and queue-session reset policy | Numbering resets only at defined session boundary |
+| FR-14 | Admin enroll/revoke kiosks; patient issues an anonymous walk-in ticket by Department then Service | Only a paired kiosk can issue; service and daily sequence are server validated |
 
 ## 5. Typical end-to-end journey
 Admin creates Consultation service and Counter 1; assigns staff and Main Lobby screen; chooses format and prefix. Staff logs in, opens Counter 1, issues `C-001` in current session, prints it, calls next; backend transaction commits; display receives update and shows `C-001 — Counter 1`; on websocket interruption, display reads a fresh snapshot and resumes.
@@ -44,6 +45,9 @@ Admin creates Consultation service and Counter 1; assigns staff and Main Lobby s
 ## 8. Display screens (MVP)
 - Device pairing/activation flow; full-screen read-only now-serving layout; service/counter filters from server profile; updated-at indicator, reconnection state and safe fallback. No patient names.
 
+## 8a. Patient kiosk (SPEC-009)
+- Department → Service selection, confirm, issue an anonymous walk-in ticket, and show its persisted code with manual print and start-over actions. Admin pairs and revokes kiosk devices; the kiosk cannot access queue or staff data.
+
 ## 9. Non-functional requirements (targets to validate during pilot)
 - **Consistency:** no duplicate session/service ticket identifiers; atomic call-next; server is source of truth.
 - **Performance initial target:** P95 typical authenticated command < 1 second under pilot load; display notification target < 2 seconds after commit in healthy LAN. These are provisional service objectives, not guarantees.
@@ -54,7 +58,7 @@ Admin creates Consultation service and Counter 1; assigns staff and Main Lobby s
 - **Maintainability:** reviewed migrations, typed API contract, unit/integration/concurrency testing, documented release/rollback.
 
 ## 10. Out of scope for MVP
-Patient charts, appointment/scheduling engine, billing, payment, SMS/email, voice announcements, queue prediction, patient self-service kiosk, mobile native app, inter-branch federation, offline queue issuing, arbitrary drag-and-drop custom code, custom clinical triage/priority rules, BI/analytics.
+Patient charts, appointment/scheduling engine, billing, payment, SMS/email, voice announcements, queue prediction or kiosk functions beyond the bounded ticket issue flow in SPEC-009, mobile native app, inter-branch federation, offline queue issuing, arbitrary drag-and-drop custom code, custom clinical triage/priority rules, BI/analytics.
 
 ## 11. Success metrics
 Zero duplicate ticket claims in concurrency suite/pilot; 100% privileged mutations attributed in audit; staff can issue/call/complete in normal flow; admin can add service/counter/display without code change; screen resynchronizes after simulated disconnect; printing verified on chosen physical printer; restore drill successful.
@@ -63,7 +67,7 @@ Zero duplicate ticket claims in concurrency suite/pilot; 100% privileged mutatio
 Clinic will supply printing hardware constraints, session/number-reset definition, recall/skip behavior, screen connectivity topology, administrative provisioning policy, and retention requirements. See `docs/OPEN_DECISIONS.md`.
 
 ## 13. Expansion protocol (post-MVP)
-Each proposed new capability receives `PRD-CQ-00N` addendum: user problem, bounded context, data sensitivity, role matrix, acceptance and non-goals. Update ARD/ADR and a new numbered spec before coding. Future ideas: appointments, multiple branches, kiosk, reporting, priority, integrations; **not pre-approved**.
+Each proposed new capability receives `PRD-CQ-00N` addendum: user problem, bounded context, data sensitivity, role matrix, acceptance and non-goals. Update ARD/ADR and a new numbered spec before coding. Future ideas: appointments, multiple branches, reporting, priority, integrations; **not pre-approved**.
 
 ### Approved forwarding workflow addendum — 2026-10-20
 
@@ -71,4 +75,12 @@ See [SPEC-005](docs/specs/005-forwarding-clinic-queue/spec.md) and [ADR-0002](do
 
 ### Approved service and station configuration addendum — 2026-10-21
 
-See [SPEC-006](docs/specs/006-service-station-admin-config/spec.md). For FR-03, the existing Department is the legacy channel; each Service and physical Station belongs to one Department; Stations may be associated with multiple Services and Staff assigned to that same Department. This slice is configuration-only: queue issuance, forwarding, and calls remain department-scoped until a later approved integration spec.
+See [SPEC-006](docs/specs/006-service-station-admin-config/spec.md). For FR-03, the existing Department is the legacy channel; each Service and physical Station belongs to one Department; Stations may be associated with multiple Services and Staff assigned to that same Department. The original SPEC-006 slice was configuration-only; the service-aware issue and forwarding follow-up is now approved in SPEC-008.
+
+### Approved service-aware visit workflow addendum — 2026-10-21
+
+See [SPEC-008](docs/specs/008-service-aware-visit-issue/spec.md). Reception selects an active Service and the API derives its Department; staff choose an active next Service when forwarding. Each new department step retains its Service, while existing Department-scoped call-next and display behavior stays in place. Reception can reprint the original issue details using the daily visit code and Asia/Manila clinic date. The stable clinic-wide code, appointment ordering, anonymous visit data, manual 58 mm browser print, and current React design remain unchanged. Station-based calling and patient-level duplicate detection are not included.
+
+### PRD-CQ-009 — Self-service kiosk
+
+See [SPEC-009](docs/specs/009-self-service-kiosk/spec.md). A paired kiosk lets a walk-in choose an active Department, then one of its active Services, and issue an anonymous ticket through the same durable daily sequence as Reception. A single active Service is preselected. Kiosks use a separate revocable device identity and a responsive, touch-first visual direction; they cannot read queues or staff/receipt data. Ticket printing remains a user-initiated browser print action.

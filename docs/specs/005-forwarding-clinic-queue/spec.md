@@ -2,6 +2,8 @@
 
 **Status:** Approved brief; local MVP implementation and covered acceptance checks complete; operational/release gates remain pending | **Date:** 2026-10-20 | **Product:** PRD-CQ-001 addendum | **Architecture:** ADR-0002
 
+**Current follow-up:** [SPEC-008](../008-service-aware-visit-issue/spec.md) supersedes this spec's original Department-based issue and forward payloads with Service IDs and adds receipt lookup by clinic date/code. This file preserves the approved SPEC-005 baseline; current behavior is described in SPEC-008.
+
 ## Goal
 
 Replace the localhost-only demo queue with a durable local clinic system for issuing one anonymous visit code and forwarding that visit between dynamically configured departments. Admins configure departments, users, and department displays. Reception issues visits. Department staff call, return missed calls to pending, and forward visits. Displays show only the assigned department's waiting and currently called visits.

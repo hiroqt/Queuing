@@ -8,4 +8,4 @@
 - [ ] Validated config schema; no arbitrary code, stored XSS or HTML injection
 - [ ] Standard error responses and audit of sensitive actions
 - [ ] Security/integration tests cover direct unauthorized API calls
-- [ ] If SPEC-007 local setup is enabled, verify Development environment, loopback Host and remote address, Admin API path scope, and denied queue access
+- [ ] If SPEC-007 local setup is enabled, verify Development environment, loopback Host and remote address, Admin API path scope, frontend-only Reception/Staff previews, and denied unauthenticated queue access
