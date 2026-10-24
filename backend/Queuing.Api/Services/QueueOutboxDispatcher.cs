@@ -41,15 +41,27 @@ public sealed class QueueOutboxDispatcher(
         {
             var displayIds = await db.DisplayDevices.AsNoTracking()
                 .Where(device => device.Active && device.CredentialHash != null && device.DepartmentId == message.DepartmentId)
-                .Select(device => device.Id)
+                .Select(device => new { device.Id, device.CredentialHash })
                 .ToArrayAsync(cancellationToken);
-            foreach (var displayId in displayIds)
+            foreach (var display in displayIds)
             {
-                await hub.Clients.Group(QueueHub.DisplayGroupName(displayId))
+                await hub.Clients.Group(QueueHub.DisplayGroupName(display.Id, display.CredentialHash!))
                     .SendAsync("QueueChanged", cancellationToken);
             }
+            await NotifyLobbyDisplaysAsync(db, hub, cancellationToken);
             message.PublishedAtUtc = DateTimeOffset.UtcNow;
         }
         if (batch.Length > 0) await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public static async Task NotifyLobbyDisplaysAsync(QueueDbContext db, IHubContext<QueueHub> hub, CancellationToken cancellationToken)
+    {
+        var displayIds = await db.DisplayDevices.AsNoTracking()
+            .Where(device => device.DepartmentId == null && device.Active && device.CredentialHash != null)
+            .Select(device => new { device.Id, device.CredentialHash })
+            .ToArrayAsync(cancellationToken);
+        foreach (var display in displayIds)
+            // shortcut: one in-flight invalidation may reach a just-revoked generation; it carries no queue data, upgrade to server-side connection eviction if that must be prevented.
+            await hub.Clients.Group(QueueHub.DisplayGroupName(display.Id, display.CredentialHash!)).SendAsync("QueueChanged", cancellationToken);
     }
 }

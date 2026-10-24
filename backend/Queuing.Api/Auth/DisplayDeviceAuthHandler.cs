@@ -28,19 +28,21 @@ public sealed class DisplayDeviceAuthHandler(
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(credential)));
         var device = await db.DisplayDevices.AsNoTracking()
             .Where(item => item.Active && item.CredentialHash == hash)
-            .Select(item => new { item.Id, item.DepartmentId })
+            .Select(item => new { item.Id, item.DepartmentId, item.CredentialHash })
             .SingleOrDefaultAsync(Context.RequestAborted);
         if (device is null)
         {
             return AuthenticateResult.Fail("Display pairing is no longer active.");
         }
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
             new Claim(ClaimTypes.NameIdentifier, device.Id.ToString()),
             new Claim(ClaimTypes.Name, "paired-display"),
-            new Claim("department_id", device.DepartmentId.ToString())
+            new Claim("display_type", device.DepartmentId is null ? "Lobby" : "Department"),
+            new Claim("display_generation", device.CredentialHash!)
         };
+        if (device.DepartmentId is { } departmentId) claims.Add(new Claim("department_id", departmentId.ToString()));
         var identity = new ClaimsIdentity(claims, SchemeName);
         return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName));
     }
