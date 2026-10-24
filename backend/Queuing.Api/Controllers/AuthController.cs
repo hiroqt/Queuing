@@ -31,20 +31,24 @@ public sealed class AuthController(
     {
         if (User.Identity?.IsAuthenticated != true || !Guid.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var userId))
         {
-            return Ok(new { authenticated = false, userName = (string?)null, role = (string?)null, departmentIds = Array.Empty<Guid>(), mustChangePassword = false });
+            return Ok(new { authenticated = false, userName = (string?)null, role = (string?)null, departmentIds = Array.Empty<Guid>(), serviceIds = Array.Empty<Guid>(), mustChangePassword = false });
         }
 
         var user = await userManager.FindByIdAsync(userId.ToString());
         if (user is null || !user.Active)
         {
             await signInManager.SignOutAsync();
-            return Ok(new { authenticated = false, userName = (string?)null, role = (string?)null, departmentIds = Array.Empty<Guid>(), mustChangePassword = false });
+            return Ok(new { authenticated = false, userName = (string?)null, role = (string?)null, departmentIds = Array.Empty<Guid>(), serviceIds = Array.Empty<Guid>(), mustChangePassword = false });
         }
 
         var roles = await userManager.GetRolesAsync(user);
         var departmentIds = await db.UserDepartments.AsNoTracking()
             .Where(assignment => assignment.UserId == user.Id)
             .Select(assignment => assignment.DepartmentId)
+            .ToArrayAsync(cancellationToken);
+        var serviceIds = await db.UserServices.AsNoTracking()
+            .Where(assignment => assignment.UserId == user.Id)
+            .Select(assignment => assignment.ServiceId)
             .ToArrayAsync(cancellationToken);
         var requestToken = antiforgery.GetAndStoreTokens(HttpContext).RequestToken;
         return Ok(new
@@ -53,6 +57,7 @@ public sealed class AuthController(
             userName = user.UserName,
             role = roles.FirstOrDefault(),
             departmentIds,
+            serviceIds,
             mustChangePassword = user.MustChangePassword,
             requestToken
         });

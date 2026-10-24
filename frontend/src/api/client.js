@@ -40,7 +40,7 @@ export async function api(path, options = {}) {
   delete fetchOptions.csrf;
   const headers = new Headers(options.headers);
   const hasBody = options.body !== undefined;
-  if (hasBody && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  if (hasBody && !(options.body instanceof FormData) && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
 
   if (!["GET", "HEAD", "OPTIONS"].includes(method) && options.csrf !== false) {
     if (!requestToken) await refreshRequestToken();
@@ -80,6 +80,7 @@ export const usersApi = {
   list: (signal) => api("/admin/users", { signal }),
   create: (user) => api("/admin/users", { method: "POST", body: JSON.stringify(user) }),
   update: (id, changes) => api(`/admin/users/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(changes) }),
+  delete: (id) => api(`/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" }),
 };
 
 export const servicesApi = {
@@ -106,6 +107,16 @@ export const displaysApi = {
     clearRequestToken();
   },
   snapshot: (signal) => api("/displays/me/snapshot", { signal }),
+  lobbySnapshot: (signal) => api("/displays/me/lobby-snapshot", { signal }),
+  lobbyVideos: (signal) => api("/displays/me/videos", { signal }),
+  adminVideos: (signal) => api("/admin/display-videos", { signal }),
+  addVideoUrl: (url) => api("/admin/display-videos/urls", { method: "POST", body: JSON.stringify({ url }) }),
+  uploadVideo: (file) => {
+    const body = new FormData();
+    body.append("file", file);
+    return api("/admin/display-videos/upload", { method: "POST", body });
+  },
+  deleteVideo: (id) => api(`/admin/display-videos/${encodeURIComponent(id)}`, { method: "DELETE" }),
 };
 
 export const kiosksApi = {

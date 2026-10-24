@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <Compile Include="..\Queuing.Api\Auth\LocalSetupAccess.cs" Link="Auth\LocalSetupAccess.cs" />
+    <Compile Include="..\Queuing.Api\Services\DisplayMediaValidation.cs" Link="Services\DisplayMediaValidation.cs" />
   </ItemGroup>
 
 </Project>

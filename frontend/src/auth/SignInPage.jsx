@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router";
 import { useAuth } from "./useAuth.js";
 import { homeForRole } from "./roles.js";
+import { Eye, EyeOff } from "lucide-react";
 
 export default function SignInPage() {
   const auth = useAuth();
@@ -9,6 +10,7 @@ export default function SignInPage() {
   const location = useLocation();
   const [userName, setUserName] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -42,7 +44,7 @@ export default function SignInPage() {
           <label htmlFor="user-name">Username</label>
           <input id="user-name" name="userName" autoComplete="username" required value={userName} onChange={(event) => setUserName(event.target.value)} />
           <label htmlFor="password">Password</label>
-          <input id="password" name="password" type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} />
+          <div className="password-input"><input id="password" name="password" type={showPassword ? "text" : "password"} autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} /><button className="password-visibility" type="button" aria-label={showPassword ? "Hide entered characters" : "Show entered characters"} onClick={() => setShowPassword((shown) => !shown)}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div>
           {error && <p className="action-message" role="alert">{error}</p>}
           <button className="button button-dark" type="submit" disabled={submitting}>{submitting ? "Signing in…" : "Sign in"}</button>
         </form>

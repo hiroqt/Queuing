@@ -15,6 +15,7 @@ public sealed class QueueDbContext(DbContextOptions<QueueDbContext> options)
 
     public DbSet<Department> Departments => Set<Department>();
     public DbSet<UserDepartment> UserDepartments => Set<UserDepartment>();
+    public DbSet<UserService> UserServices => Set<UserService>();
     public DbSet<ClinicService> Services => Set<ClinicService>();
     public DbSet<Station> Stations => Set<Station>();
     public DbSet<StationService> StationServices => Set<StationService>();
@@ -22,8 +23,10 @@ public sealed class QueueDbContext(DbContextOptions<QueueDbContext> options)
     public DbSet<Visit> Visits => Set<Visit>();
     public DbSet<DepartmentStep> DepartmentSteps => Set<DepartmentStep>();
     public DbSet<DailySequence> DailySequences => Set<DailySequence>();
+    public DbSet<DepartmentSequence> DepartmentSequences => Set<DepartmentSequence>();
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
     public DbSet<DisplayDevice> DisplayDevices => Set<DisplayDevice>();
+    public DbSet<DisplayVideo> DisplayVideos => Set<DisplayVideo>();
     public DbSet<KioskDevice> KioskDevices => Set<KioskDevice>();
     public DbSet<AuditRecord> AuditRecords => Set<AuditRecord>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
@@ -55,6 +58,19 @@ public sealed class QueueDbContext(DbContextOptions<QueueDbContext> options)
             entity.HasOne(assignment => assignment.Department)
                 .WithMany()
                 .HasForeignKey(assignment => assignment.DepartmentId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<UserService>(entity =>
+        {
+            entity.HasKey(assignment => new { assignment.UserId, assignment.ServiceId });
+            entity.HasOne(assignment => assignment.User)
+                .WithMany(user => user.ServiceAssignments)
+                .HasForeignKey(assignment => assignment.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(assignment => assignment.Service)
+                .WithMany(service => service.UserAssignments)
+                .HasForeignKey(assignment => assignment.ServiceId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -115,6 +131,14 @@ public sealed class QueueDbContext(DbContextOptions<QueueDbContext> options)
             entity.Property(sequence => sequence.ClinicDate).HasConversion(ClinicDateConverter).HasColumnType("date");
         });
 
+        builder.Entity<DepartmentSequence>(entity =>
+        {
+            entity.HasKey(sequence => new { sequence.DepartmentId, sequence.ClinicDate });
+            entity.Property(sequence => sequence.ClinicDate).HasConversion(ClinicDateConverter).HasColumnType("date");
+            entity.HasOne(sequence => sequence.Department).WithMany()
+                .HasForeignKey(sequence => sequence.DepartmentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
         builder.Entity<Visit>(entity =>
         {
             entity.ToTable(table => table.HasCheckConstraint(
@@ -152,6 +176,9 @@ public sealed class QueueDbContext(DbContextOptions<QueueDbContext> options)
                 .HasPrincipalKey(service => new { service.DepartmentId, service.Id })
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(step => new { step.DepartmentId, step.State, step.AppointmentAtUtc, step.EnteredAtUtc });
+            entity.Property(step => step.TicketDate).HasConversion(ClinicDateConverter).HasColumnType("date");
+            entity.HasIndex(step => new { step.DepartmentId, step.TicketDate, step.DepartmentTicketNumber })
+                .HasDatabaseName("UX_DepartmentSteps_DepartmentDateNumber").IsUnique();
             entity.Property(step => step.State).HasConversion<string>().HasMaxLength(20);
             entity.Property(step => step.EnteredAtUtc).HasPrecision(6);
         });
@@ -176,6 +203,15 @@ public sealed class QueueDbContext(DbContextOptions<QueueDbContext> options)
                 .WithMany()
                 .HasForeignKey(device => device.DepartmentId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<DisplayVideo>(entity =>
+        {
+            entity.Property(video => video.Name).HasMaxLength(160).IsRequired();
+            entity.Property(video => video.Url).HasMaxLength(2048);
+            entity.Property(video => video.StorageKey).HasMaxLength(80);
+            entity.Property(video => video.ContentType).HasMaxLength(40).IsRequired();
+            entity.HasIndex(video => new { video.CreatedAtUtc, video.Id });
         });
 
         builder.Entity<KioskDevice>(entity =>
@@ -209,6 +245,7 @@ public sealed class QueueUser : IdentityUser<Guid>
     public bool MustChangePassword { get; set; }
     public bool Active { get; set; } = true;
     public ICollection<UserDepartment> DepartmentAssignments { get; } = new List<UserDepartment>();
+    public ICollection<UserService> ServiceAssignments { get; } = new List<UserService>();
 }
 
 public sealed class Department
@@ -228,6 +265,14 @@ public sealed class UserDepartment
     public ICollection<StationStaff> StationAssignments { get; } = new List<StationStaff>();
 }
 
+public sealed class UserService
+{
+    public Guid UserId { get; set; }
+    public QueueUser User { get; set; } = null!;
+    public Guid ServiceId { get; set; }
+    public ClinicService Service { get; set; } = null!;
+}
+
 public sealed class ClinicService
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -236,6 +281,7 @@ public sealed class ClinicService
     public string Name { get; set; } = "";
     public bool Active { get; set; } = true;
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public ICollection<UserService> UserAssignments { get; } = new List<UserService>();
 }
 
 public sealed class Station
@@ -274,6 +320,14 @@ public sealed class DailySequence
     public int LastSequence { get; set; }
 }
 
+public sealed class DepartmentSequence
+{
+    public Guid DepartmentId { get; set; }
+    public Department Department { get; set; } = null!;
+    public DateOnly ClinicDate { get; set; }
+    public int LastSequence { get; set; }
+}
+
 public sealed class Visit
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -300,6 +354,8 @@ public sealed class DepartmentStep
     public Department Department { get; set; } = null!;
     public Guid? ServiceId { get; set; }
     public ClinicService? Service { get; set; }
+    public DateOnly? TicketDate { get; set; }
+    public int? DepartmentTicketNumber { get; set; }
     public DateTimeOffset? AppointmentAtUtc { get; set; }
     public DepartmentStepState State { get; set; }
     public DateTimeOffset EnteredAtUtc { get; set; }
@@ -322,13 +378,23 @@ public sealed class DisplayDevice
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Name { get; set; } = "";
-    public Guid DepartmentId { get; set; }
-    public Department Department { get; set; } = null!;
+    public Guid? DepartmentId { get; set; }
+    public Department? Department { get; set; }
     public bool Active { get; set; } = true;
     public string? PairingCodeHash { get; set; }
     public DateTimeOffset? PairingExpiresAtUtc { get; set; }
     public string? CredentialHash { get; set; }
     public DateTimeOffset? PairedAtUtc { get; set; }
+}
+
+public sealed class DisplayVideo
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Name { get; set; } = "";
+    public string? Url { get; set; }
+    public string? StorageKey { get; set; }
+    public string ContentType { get; set; } = "";
+    public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }
 
 public sealed class KioskDevice

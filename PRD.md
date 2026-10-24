@@ -4,6 +4,10 @@
 
 > Approved implementation addendum: [SPEC-005](docs/specs/005-forwarding-clinic-queue/spec.md) defines the forwarding workflow. It uses one stable anonymous visit code, manual appointment times, dynamic departments, department-scoped displays, and local MySQL. It does not imply the broader proposed PRD is fully implemented or approve production use.
 
+> Approved display addendum: [SPEC-010](docs/specs/010-multi-department-lobby-display/spec.md) adds a paired lobby display for all active Departments, a current call and three-item waiting preview per Department, and an Admin-managed audible information-video playlist. Existing department monitors remain Department-scoped.
+> Approved Staff access addendum: [SPEC-011](docs/specs/011-service-scoped-staff-access/spec.md) assigns Staff accounts to Services and enforces that scope on queue reads and actions; local no-login Admin remains Development + loopback only.
+> Approved ticket/display addendum: [SPEC-012](docs/specs/012-department-ticket-numbering/spec.md) gives each Department its own daily ticket sequence, preserves the clinic visit code for lookup/continuity, and starts lobby video muted automatically.
+
 ## 1. Product statement
 A configurable, reliable clinic queue that staff can operate, admins can configure, and patients can follow through printed tickets and public displays. It is **not** a medical record system. All patient-facing views use anonymous ticket identifiers.
 
@@ -71,7 +75,7 @@ Each proposed new capability receives `PRD-CQ-00N` addendum: user problem, bound
 
 ### Approved forwarding workflow addendum — 2026-10-20
 
-See [SPEC-005](docs/specs/005-forwarding-clinic-queue/spec.md) and [ADR-0002](docs/adr/0002-mysql-and-forwarding-visits.md). Decisions: local MySQL 8.x; `Asia/Manila`; one clinic-wide daily visit code that remains unchanged across departments; manual optional appointment entry per department step; due appointments before FIFO walk-ins; one active department step per visit; Admin, Reception, and department-assigned Staff; admin-created revocable monitors scoped to one department. No patient identity fields or external appointment-system integration.
+See [SPEC-005](docs/specs/005-forwarding-clinic-queue/spec.md) and [ADR-0002](docs/adr/0002-mysql-and-forwarding-visits.md). Decisions: local MySQL 8.x; `Asia/Manila`; one stable clinic-wide visit code plus a separate daily ticket sequence per Department; manual optional appointment entry per department step; due appointments before FIFO walk-ins; one active department step per visit; Admin, Reception, and department-assigned Staff; admin-created revocable monitors scoped to one department. No patient identity fields or external appointment-system integration.
 
 ### Approved service and station configuration addendum — 2026-10-21
 
@@ -80,6 +84,12 @@ See [SPEC-006](docs/specs/006-service-station-admin-config/spec.md). For FR-03, 
 ### Approved service-aware visit workflow addendum — 2026-10-21
 
 See [SPEC-008](docs/specs/008-service-aware-visit-issue/spec.md). Reception selects an active Service and the API derives its Department; staff choose an active next Service when forwarding. Each new department step retains its Service, while existing Department-scoped call-next and display behavior stays in place. Reception can reprint the original issue details using the daily visit code and Asia/Manila clinic date. The stable clinic-wide code, appointment ordering, anonymous visit data, manual 58 mm browser print, and current React design remain unchanged. Station-based calling and patient-level duplicate detection are not included.
+
+### Approved Service-scoped Staff access addendum — 2026-10-24
+
+See [SPEC-011](docs/specs/011-service-scoped-staff-access/spec.md). Admin assigns each Staff account one or more Services. The API limits queue visibility and mutations to assigned Services while Staff may still forward to any active destination Service. Existing Department assignments are backfilled to their Services and retained for service-less historical steps. Reception, display, kiosk, and local-only Admin behavior remain unchanged.
+
+See [SPEC-012](docs/specs/012-department-ticket-numbering/spec.md). Reception and kiosk issue a Department-local daily ticket number; forwarding allocates a number in the destination Department. The clinic visit code remains available for receipt lookup. Lobby video starts muted automatically and needs a direct display action for sound.
 
 ### PRD-CQ-009 — Self-service kiosk
 

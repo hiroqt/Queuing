@@ -3,7 +3,7 @@
 ## Implementation
 
 1. Add a small API access predicate that requires an enabled setting, the Development environment, a loopback remote address, and a loopback Host. Add unauthenticated Admin role claims only to anonymous `/api/v1/admin/*` requests after cookie authentication and before authorization; preserve authenticated principals so cookie sessions and audit attribution continue to work.
-2. Make Vite development enable the local setup flag by default while allowing `VITE_LOCAL_SETUP_MODE=false`. The frontend starts in the Admin role without requesting a session and shows a visible local-mode label; production builds retain the existing auth provider.
+2. Make Vite development enable the local setup flag by default while allowing `VITE_LOCAL_SETUP_MODE=false`. The frontend bypasses session checks only on `/` and `/admin/*`; Reception and Staff routes use normal session and role guards. Production builds retain normal authentication everywhere.
 3. Preserve the API client's existing CSRF token flow for writes. Do not add an account, credential, endpoint, or database change.
 
 ## Verification

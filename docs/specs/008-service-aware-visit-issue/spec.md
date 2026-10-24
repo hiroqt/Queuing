@@ -3,6 +3,8 @@
 **Status:** Implemented and locally verified · **Date:** 2026-10-21
 **Extends:** [SPEC-005](../005-forwarding-clinic-queue/spec.md), [SPEC-006](../006-service-station-admin-config/spec.md)
 
+**Current follow-up:** [SPEC-012](../012-department-ticket-numbering/spec.md) adds a Department-local daily ticket number while retaining the clinic-wide visit code for lookup and continuity.
+
 ## Goal
 
 Use the Services already configured by Admin when Reception issues a visit and when Staff forwards it. Keep the existing stable clinic-wide daily visit code, appointment ordering, department authorization, MySQL persistence, and React design. Let Reception find an old receipt using its printed daily code and clinic date.

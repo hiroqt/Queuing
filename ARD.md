@@ -27,12 +27,12 @@ See `docs/STRUCTURE.md` for exhaustive tree and `docs/adr/0001-architecture.md` 
 
 ## 5. Entity outline
 - `ClinicSettings(id, timezone_id, active_queue_policy_version)`
-- `Service(id, department_id, name, active)`; service prefixes/numbering are not used by the stable SPEC-005 visit code
+- `Service(id, department_id, name, active)`; Services do not own ticket sequences
 - `Station(id, department_id, name, active)`; physical counter/window
 - `StationService(department_id, station_id, service_id)` and `StationStaff(department_id, station_id, user_id)`; each association is constrained to one Department
 - `Visit(id, clinic_date, sequence, rendered_code, state, issued_by, issued_at_utc, current_step_id?, version)`; one stable clinic-wide daily visit code
 - `DepartmentStep(id, visit_id, department_id, appointment_at_utc?, state, entered_at_utc, called_at_utc?, completed_at_utc?, version)`; one active step pointer per visit
-- `DepartmentSequence` is internal queue ordering only; it does not issue a second patient-facing ticket code
+- `DepartmentSequence(department_id, clinic_date, last_sequence)` allocates each Department's daily ticket numbers; `DepartmentStep` stores its nullable `ticket_date` and `department_ticket_number` for history and display
 - `VisitEvent(id, visit_id, department_step_id?, kind, actor_id, occurred_at_utc, metadata_safe)`
 - `IdempotencyRecord(scope, key_hash, request_hash, result_ref, created_at_utc)`
 - `DisplayDevice(id, name, credential_hash, active, last_seen_at_utc)`
