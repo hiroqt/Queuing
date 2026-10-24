@@ -18,12 +18,19 @@ public sealed class VisitCommandsController(QueueDbContext db, TimeProvider cloc
     [Authorize(Policy = QueueRoles.Staff)]
     public async Task<IActionResult> GetDepartmentQueue(Guid departmentId, CancellationToken cancellationToken)
     {
-        if (!await DepartmentScope.CanAccessAsync(User, departmentId, db, cancellationToken)) return Forbid();
+        if (!await ServiceScope.CanAccessDepartmentAsync(User, departmentId, db, cancellationToken)) return Forbid();
+        var isAdmin = User.IsInRole(QueueRoles.Admin);
+        var userId = VisitCommandSupport.CurrentUserId(User);
+        if (!isAdmin && userId is null) return Unauthorized();
         var department = await db.Departments.AsNoTracking().SingleAsync(item => item.Id == departmentId, cancellationToken);
         var visits = await db.DepartmentSteps.AsNoTracking()
             .Where(step => step.DepartmentId == departmentId && step.Visit.CurrentStepId == step.Id &&
+                (isAdmin || (step.ServiceId.HasValue
+                    ? db.UserServices.Any(assignment => assignment.UserId == userId && assignment.ServiceId == step.ServiceId.Value)
+                    : db.UserDepartments.Any(assignment => assignment.UserId == userId && assignment.DepartmentId == departmentId))) &&
                 (step.State == DepartmentStepState.Pending || step.State == DepartmentStepState.Called))
             .Include(step => step.Visit)
+            .Include(step => step.Service)
             .OrderBy(step => step.State)
             .ThenBy(step => step.AppointmentAtUtc == null)
             .ThenBy(step => step.AppointmentAtUtc)
@@ -37,7 +44,11 @@ public sealed class VisitCommandsController(QueueDbContext db, TimeProvider cloc
                 step.State.ToString(),
                 step.AppointmentAtUtc,
                 step.Visit.IssuedAtUtc,
-                step.CalledAtUtc))
+                step.CalledAtUtc,
+                step.ServiceId,
+                step.Service == null ? null : step.Service.Name,
+                true,
+                step.DepartmentTicketNumber))
             .ToArrayAsync(cancellationToken);
         var now = clock.GetUtcNow();
         return Ok(new DepartmentQueueDto(
@@ -58,7 +69,7 @@ public sealed class VisitCommandsController(QueueDbContext db, TimeProvider cloc
     {
         var key = VisitCommandSupport.ParseIdempotencyKey(idempotencyKey);
         if (key is null) return Problem(statusCode: 400, title: "A valid Idempotency-Key is required.");
-        if (!await DepartmentScope.CanAccessAsync(User, departmentId, db, cancellationToken)) return Forbid();
+        if (!await ServiceScope.CanAccessDepartmentAsync(User, departmentId, db, cancellationToken)) return Forbid();
 
         var userId = VisitCommandSupport.CurrentUserId(User);
         if (userId is null) return Unauthorized();
@@ -70,12 +81,24 @@ public sealed class VisitCommandsController(QueueDbContext db, TimeProvider cloc
         if (replay.Value is not null) return Ok(replay.Value);
 
         var now = clock.GetUtcNow();
+        var isAdmin = User.IsInRole(QueueRoles.Admin);
         var candidates = await db.DepartmentSteps.FromSqlInterpolated($"""
                 SELECT `step`.*
                 FROM `DepartmentSteps` AS `step`
                 INNER JOIN `Visits` AS `visit` ON `visit`.`CurrentStepId` = `step`.`Id`
                 WHERE `step`.`DepartmentId` = {departmentId}
                     AND `step`.`State` = 'Pending'
+                    AND (
+                        {isAdmin}
+                        OR (`step`.`ServiceId` IS NOT NULL AND EXISTS (
+                            SELECT 1 FROM `UserServices` AS `assignment`
+                            WHERE `assignment`.`UserId` = {userId} AND `assignment`.`ServiceId` = `step`.`ServiceId`
+                        ))
+                        OR (`step`.`ServiceId` IS NULL AND EXISTS (
+                            SELECT 1 FROM `UserDepartments` AS `assignment`
+                            WHERE `assignment`.`UserId` = {userId} AND `assignment`.`DepartmentId` = `step`.`DepartmentId`
+                        ))
+                    )
                     AND (`step`.`AppointmentAtUtc` IS NULL OR `step`.`AppointmentAtUtc` <= {now})
                 ORDER BY (`step`.`AppointmentAtUtc` IS NULL), `step`.`AppointmentAtUtc`, `step`.`EnteredAtUtc`, `visit`.`ClinicDate`, `visit`.`Sequence`
                 LIMIT 1 FOR UPDATE SKIP LOCKED
@@ -91,7 +114,10 @@ public sealed class VisitCommandsController(QueueDbContext db, TimeProvider cloc
         var visit = await db.Visits.SingleAsync(item => item.Id == candidate.VisitId, cancellationToken);
         candidate.State = DepartmentStepState.Called;
         candidate.CalledAtUtc = now;
-        var dto = new QueueVisitDto(visit.Id, visit.VisitCode, departmentId, nameof(DepartmentStepState.Called), candidate.AppointmentAtUtc, visit.IssuedAtUtc, now);
+        var serviceName = candidate.ServiceId is { } candidateServiceId
+            ? await db.Services.AsNoTracking().Where(service => service.Id == candidateServiceId).Select(service => service.Name).SingleAsync(cancellationToken)
+            : null;
+        var dto = new QueueVisitDto(visit.Id, visit.VisitCode, departmentId, nameof(DepartmentStepState.Called), candidate.AppointmentAtUtc, visit.IssuedAtUtc, now, candidate.ServiceId, serviceName, DepartmentTicketNumber: candidate.DepartmentTicketNumber);
         VisitCommandSupport.SaveCommand(db, clock, scope, key, requestHash, candidate.Id, dto);
         VisitCommandSupport.AddAudit(db, clock, userId, HttpContext.TraceIdentifier, "visit.called", "visit", visit.Id);
         VisitCommandSupport.AddOutbox(db, clock, visit.Id, departmentId);
@@ -118,9 +144,10 @@ public sealed class VisitCommandsController(QueueDbContext db, TimeProvider cloc
         if (replay.Conflict) return Problem(statusCode: 409, title: "This idempotency key was already used for another request.");
         if (replay.Value is not null) return Ok(replay.Value);
 
-        var visit = await db.Visits.Include(item => item.CurrentStep).SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
+        var visit = await db.Visits.Include(item => item.CurrentStep).ThenInclude(step => step!.Service)
+            .SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (visit?.CurrentStep is null) return NotFound();
-        if (!await DepartmentScope.CanAccessAsync(User, visit.CurrentStep.DepartmentId, db, cancellationToken)) return Forbid();
+        if (!await ServiceScope.CanAccessStepAsync(User, visit.CurrentStep.DepartmentId, visit.CurrentStep.ServiceId, db, cancellationToken)) return Forbid();
         if (!DepartmentQueuePolicy.CanReturnToPending(visit.CurrentStep.State))
         {
             return Problem(statusCode: 409, title: "Only a currently called visit can be returned to pending.");
@@ -138,7 +165,8 @@ public sealed class VisitCommandsController(QueueDbContext db, TimeProvider cloc
         }
         step.State = DepartmentStepState.Pending;
         step.CalledAtUtc = null;
-        var dto = new QueueVisitDto(visit.Id, visit.VisitCode, step.DepartmentId, nameof(DepartmentStepState.Pending), step.AppointmentAtUtc, visit.IssuedAtUtc, null);
+        var dto = new QueueVisitDto(visit.Id, visit.VisitCode, step.DepartmentId, nameof(DepartmentStepState.Pending), step.AppointmentAtUtc, visit.IssuedAtUtc, null,
+            step.ServiceId, step.Service?.Name, DepartmentTicketNumber: step.DepartmentTicketNumber);
         VisitCommandSupport.SaveCommand(db, clock, scope, key, requestHash, step.Id, dto);
         VisitCommandSupport.AddAudit(db, clock, userId, HttpContext.TraceIdentifier, "visit.returned-to-pending", "visit", visit.Id);
         VisitCommandSupport.AddOutbox(db, clock, visit.Id, step.DepartmentId);
@@ -172,10 +200,11 @@ public sealed class VisitCommandsController(QueueDbContext db, TimeProvider cloc
         if (replay.Conflict) return Problem(statusCode: 409, title: "This idempotency key was already used for another request.");
         if (replay.Value is not null) return Ok(replay.Value);
 
-        var visit = await db.Visits.Include(item => item.CurrentStep).SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
+        var visit = await db.Visits.Include(item => item.CurrentStep).ThenInclude(step => step!.Service)
+            .SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (visit?.CurrentStep is null) return NotFound();
         var currentStep = visit.CurrentStep;
-        if (!await DepartmentScope.CanAccessAsync(User, currentStep.DepartmentId, db, cancellationToken)) return Forbid();
+        if (!await ServiceScope.CanAccessStepAsync(User, currentStep.DepartmentId, currentStep.ServiceId, db, cancellationToken)) return Forbid();
         if (!DepartmentQueuePolicy.CanComplete(currentStep.State))
         {
             return Problem(statusCode: 409, title: "Only a currently called visit can be completed or forwarded.");
@@ -206,13 +235,19 @@ public sealed class VisitCommandsController(QueueDbContext db, TimeProvider cloc
         currentStep.State = DepartmentStepState.Completed;
         currentStep.CompletedAtUtc = now;
         Guid? nextStepId = null;
+        int? nextDepartmentTicketNumber = null;
         if (nextService is not null)
         {
+            var ticketDate = VisitCommandSupport.ClinicDateAt(now);
+            nextDepartmentTicketNumber = await VisitCommandSupport.NextDepartmentTicketNumberAsync(
+                db, nextService.DepartmentId, ticketDate, cancellationToken);
             var nextStep = new DepartmentStep
             {
                 VisitId = visit.Id,
                 DepartmentId = nextService.DepartmentId,
                 ServiceId = nextService.Id,
+                TicketDate = ticketDate,
+                DepartmentTicketNumber = nextDepartmentTicketNumber,
                 AppointmentAtUtc = nextAppointmentAtUtc.Value,
                 State = DepartmentStepState.Pending,
                 EnteredAtUtc = now
@@ -228,7 +263,7 @@ public sealed class VisitCommandsController(QueueDbContext db, TimeProvider cloc
             visit.Completed = true;
         }
 
-        var dto = new CompleteVisitDto(visit.Id, visit.VisitCode, visit.Completed, nextService?.DepartmentId, nextService?.Id);
+        var dto = new CompleteVisitDto(visit.Id, visit.VisitCode, visit.Completed, nextService?.DepartmentId, nextService?.Id, nextDepartmentTicketNumber);
         VisitCommandSupport.SaveCommand(db, clock, scope, key, requestHash, nextStepId ?? currentStep.Id, dto);
         VisitCommandSupport.AddAudit(db, clock, userId, HttpContext.TraceIdentifier, visit.Completed ? "visit.completed" : "visit.forwarded", "visit", visit.Id);
         VisitCommandSupport.AddOutbox(db, clock, visit.Id, currentStep.DepartmentId);
@@ -242,6 +277,9 @@ public sealed class VisitCommandsController(QueueDbContext db, TimeProvider cloc
 
 public sealed record CompleteVisitRequest(Guid? NextServiceId, string? NextDepartmentAppointmentAtLocal);
 public sealed record VisitDto(Guid Id, string VisitCode, Guid? DepartmentId, string? Status, DateTimeOffset? AppointmentAtUtc, DateTimeOffset IssuedAtUtc, bool Completed);
-public sealed record QueueVisitDto(Guid Id, string VisitCode, Guid DepartmentId, string Status, DateTimeOffset? AppointmentAtUtc, DateTimeOffset IssuedAtUtc, DateTimeOffset? CalledAtUtc, bool IsEligible = true);
+public sealed record QueueVisitDto(Guid Id, string VisitCode, Guid DepartmentId, string Status, DateTimeOffset? AppointmentAtUtc, DateTimeOffset IssuedAtUtc, DateTimeOffset? CalledAtUtc, Guid? ServiceId, string? ServiceName, bool IsEligible = true, int? DepartmentTicketNumber = null)
+{
+    public string TicketNumber => DepartmentTicketNumber?.ToString("D3", System.Globalization.CultureInfo.InvariantCulture) ?? VisitCode;
+}
 public sealed record DepartmentQueueDto(string DepartmentName, QueueVisitDto[] Waiting, QueueVisitDto[] Called);
-public sealed record CompleteVisitDto(Guid Id, string VisitCode, bool Completed, Guid? NextDepartmentId, Guid? NextServiceId);
+public sealed record CompleteVisitDto(Guid Id, string VisitCode, bool Completed, Guid? NextDepartmentId, Guid? NextServiceId, int? NextDepartmentTicketNumber = null);

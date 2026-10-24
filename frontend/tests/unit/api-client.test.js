@@ -36,6 +36,30 @@ test("CSRF token endpoint sets a request token in memory", async () => {
   }
 });
 
+test("multipart uploads leave Content-Type boundary to the browser", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (input, options) => {
+    requests.push({ url: String(input), options });
+    return requests.length === 1
+      ? new Response(JSON.stringify({ requestToken: "upload-token" }), { status: 200 })
+      : new Response(JSON.stringify({ id: "video-1" }), { status: 201 });
+  };
+  clearRequestToken();
+
+  try {
+    const body = new FormData();
+    body.append("file", new Blob(["video"]), "welcome.mp4");
+    await api("/admin/display-videos/upload", { method: "POST", body });
+    assert.equal(requests[1].options.headers.get("X-CSRF-TOKEN"), "upload-token");
+    assert.equal(requests[1].options.headers.has("Content-Type"), false);
+    assert.equal(requests[1].options.body, body);
+  } finally {
+    globalThis.fetch = originalFetch;
+    clearRequestToken();
+  }
+});
+
 test("login response replaces the anonymous CSRF token before authenticated mutations", async () => {
   const originalFetch = globalThis.fetch;
   const requests = [];

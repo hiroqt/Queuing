@@ -53,6 +53,7 @@ lerna-debug.log*
 ## Logs & Temp files
 *.log
 logs/
+[Aa]pp_[Dd]ata/
 [Tt]emp/
 *.tmp
 *.sw?

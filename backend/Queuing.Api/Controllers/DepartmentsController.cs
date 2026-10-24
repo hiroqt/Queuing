@@ -15,11 +15,20 @@ public sealed class DepartmentsController(QueueDbContext db, TimeProvider clock)
 {
     [HttpGet("departments")]
     [Authorize(Roles = "Admin,Reception,Staff")]
-    public async Task<IActionResult> ListActive(CancellationToken cancellationToken) =>
-        Ok(await db.Departments.AsNoTracking().Where(department => department.Active)
-            .OrderBy(department => department.Name)
+    public async Task<IActionResult> ListActive(CancellationToken cancellationToken)
+    {
+        var query = db.Departments.AsNoTracking().Where(department => department.Active);
+        if (User.IsInRole(QueueRoles.Staff))
+        {
+            var userId = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var parsed) ? parsed : Guid.Empty;
+            var departmentIds = db.UserDepartments.AsNoTracking().Where(assignment => assignment.UserId == userId)
+                .Select(assignment => assignment.DepartmentId);
+            query = query.Where(department => departmentIds.Contains(department.Id));
+        }
+        return Ok(await query.OrderBy(department => department.Name)
             .Select(department => new DepartmentDto(department.Id, department.Name, department.Active))
             .ToArrayAsync(cancellationToken));
+    }
 
     [HttpGet("admin/departments")]
     [Authorize(Policy = QueueRoles.Admin)]
@@ -41,6 +50,7 @@ public sealed class DepartmentsController(QueueDbContext db, TimeProvider clock)
 
         var department = new Department { Name = name };
         db.Departments.Add(department);
+        AddDepartmentChangeNotification(department.Id);
         AddAudit("department.created", department.Id);
         await db.SaveChangesAsync(cancellationToken);
         return Created($"/api/v1/admin/departments/{department.Id}", new DepartmentDto(department.Id, department.Name, department.Active));
@@ -77,10 +87,12 @@ public sealed class DepartmentsController(QueueDbContext db, TimeProvider clock)
             }
         }
 
+        var wasActive = department.Active;
         if (request.Active.HasValue)
         {
             department.Active = request.Active.Value;
         }
+        if (wasActive != department.Active || request.Name is not null) AddDepartmentChangeNotification(department.Id);
         AddAudit("department.updated", department.Id);
         await db.SaveChangesAsync(cancellationToken);
         return Ok(new DepartmentDto(department.Id, department.Name, department.Active));
@@ -94,6 +106,14 @@ public sealed class DepartmentsController(QueueDbContext db, TimeProvider clock)
         TargetId = id,
         CorrelationId = HttpContext.TraceIdentifier,
         OccurredAtUtc = clock.GetUtcNow()
+    });
+
+    private void AddDepartmentChangeNotification(Guid departmentId) => db.OutboxMessages.Add(new OutboxMessage
+    {
+        Type = "DepartmentChanged",
+        AggregateId = departmentId,
+        DepartmentId = departmentId,
+        CreatedAtUtc = clock.GetUtcNow()
     });
 }
 

@@ -254,6 +254,22 @@ namespace Queuing.Api.Migrations
                     b.ToTable("Departments");
                 });
 
+            modelBuilder.Entity("Queuing.Api.Data.DepartmentSequence", b =>
+                {
+                    b.Property<Guid>("DepartmentId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("ClinicDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("LastSequence")
+                        .HasColumnType("int");
+
+                    b.HasKey("DepartmentId", "ClinicDate");
+
+                    b.ToTable("DepartmentSequences");
+                });
+
             modelBuilder.Entity("Queuing.Api.Data.DepartmentStep", b =>
                 {
                     b.Property<Guid>("Id")
@@ -272,6 +288,9 @@ namespace Queuing.Api.Migrations
                     b.Property<Guid>("DepartmentId")
                         .HasColumnType("char(36)");
 
+                    b.Property<int?>("DepartmentTicketNumber")
+                        .HasColumnType("int");
+
                     b.Property<DateTimeOffset>("EnteredAtUtc")
                         .HasPrecision(6)
                         .HasColumnType("datetime(6)");
@@ -284,12 +303,19 @@ namespace Queuing.Api.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)");
 
+                    b.Property<DateTime?>("TicketDate")
+                        .HasColumnType("date");
+
                     b.Property<Guid>("VisitId")
                         .HasColumnType("char(36)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("DepartmentId", "ServiceId");
+
+                    b.HasIndex("DepartmentId", "TicketDate", "DepartmentTicketNumber")
+                        .HasDatabaseName("UX_DepartmentSteps_DepartmentDateNumber")
+                        .IsUnique();
 
                     b.HasIndex("DepartmentId", "State", "AppointmentAtUtc", "EnteredAtUtc");
 
@@ -309,7 +335,7 @@ namespace Queuing.Api.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("varchar(64)");
 
-                    b.Property<Guid>("DepartmentId")
+                    b.Property<Guid?>("DepartmentId")
                         .HasColumnType("char(36)");
 
                     b.Property<string>("Name")
@@ -338,6 +364,40 @@ namespace Queuing.Api.Migrations
                         .IsUnique();
 
                     b.ToTable("DisplayDevices");
+                });
+
+            modelBuilder.Entity("Queuing.Api.Data.DisplayVideo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("datetime");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("varchar(160)");
+
+                    b.Property<string>("StorageKey")
+                        .HasMaxLength(80)
+                        .HasColumnType("varchar(80)");
+
+                    b.Property<string>("Url")
+                        .HasMaxLength(2048)
+                        .HasColumnType("varchar(2048)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAtUtc", "Id");
+
+                    b.ToTable("DisplayVideos");
                 });
 
             modelBuilder.Entity("Queuing.Api.Data.IdempotencyRecord", b =>
@@ -602,6 +662,21 @@ namespace Queuing.Api.Migrations
                     b.ToTable("UserDepartments");
                 });
 
+            modelBuilder.Entity("Queuing.Api.Data.UserService", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid>("ServiceId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("UserId", "ServiceId");
+
+                    b.HasIndex("ServiceId");
+
+                    b.ToTable("UserServices");
+                });
+
             modelBuilder.Entity("Queuing.Api.Data.Visit", b =>
                 {
                     b.Property<Guid>("Id")
@@ -724,6 +799,17 @@ namespace Queuing.Api.Migrations
                     b.Navigation("Department");
                 });
 
+            modelBuilder.Entity("Queuing.Api.Data.DepartmentSequence", b =>
+                {
+                    b.HasOne("Queuing.Api.Data.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Department");
+                });
+
             modelBuilder.Entity("Queuing.Api.Data.DepartmentStep", b =>
                 {
                     b.HasOne("Queuing.Api.Data.Department", "Department")
@@ -756,8 +842,7 @@ namespace Queuing.Api.Migrations
                     b.HasOne("Queuing.Api.Data.Department", "Department")
                         .WithMany()
                         .HasForeignKey("DepartmentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Department");
                 });
@@ -833,6 +918,25 @@ namespace Queuing.Api.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Queuing.Api.Data.UserService", b =>
+                {
+                    b.HasOne("Queuing.Api.Data.ClinicService", "Service")
+                        .WithMany("UserAssignments")
+                        .HasForeignKey("ServiceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Queuing.Api.Data.QueueUser", "User")
+                        .WithMany("ServiceAssignments")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Service");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Queuing.Api.Data.Visit", b =>
                 {
                     b.HasOne("Queuing.Api.Data.KioskDevice", "IssuedByKioskDevice")
@@ -858,9 +962,16 @@ namespace Queuing.Api.Migrations
                     b.Navigation("IssuedByKioskDevice");
                 });
 
+            modelBuilder.Entity("Queuing.Api.Data.ClinicService", b =>
+                {
+                    b.Navigation("UserAssignments");
+                });
+
             modelBuilder.Entity("Queuing.Api.Data.QueueUser", b =>
                 {
                     b.Navigation("DepartmentAssignments");
+
+                    b.Navigation("ServiceAssignments");
                 });
 
             modelBuilder.Entity("Queuing.Api.Data.Station", b =>

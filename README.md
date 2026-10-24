@@ -10,9 +10,11 @@ A local clinic queue app with an ASP.NET Core API, a VB.NET workflow library, an
 - **Workflow:** Admin configures departments, services, physical stations, staff assignments, and monitors; Reception chooses an active service and issues a visit; assigned staff call, return a no-show to pending, then complete or forward the visit by choosing its next service.
 - **Kiosk:** Admin registers a kiosk and generates a one-time pairing code. At `/kiosk`, a paired device lets walk-ins choose a Department, then a Service, confirm, and issue an anonymous ticket through the same daily sequence as Reception. Kiosks cannot read queues or staff records.
 - **Displays:** Open `/display/pair` in a new monitor tab and enter its one-time admin-generated code. The monitor receives a revocable device-only cookie and opens `/display` without a staff username or password.
-- **Persistence:** `backend/Queuing.Api/Data/Migrations/` contains the initial schema, queue timestamp precision, service/station configuration, service-linked visit-step, and kiosk issuer migrations. The one-time `--bootstrap-admin` command applies migrations and seeds the three initial departments and roles.
+- **Persistence:** `backend/Queuing.Api/Data/Migrations/` contains the initial schema, queue timestamp precision, Service/Station configuration, service-linked visit-step, kiosk issuer, Service-scoped Staff assignment, lobby display/video, and Department ticket sequence migrations. The one-time `--bootstrap-admin` command applies migrations and seeds the three initial departments and roles.
 
-The visit code is clinic-wide and daily, based on `Asia/Manila`; it can repeat on a later date. Reception can reprint by visit code plus clinic date. Kiosk issue is walk-in only and prints through an explicit browser print action. Service determines each new step's Department, but queue ordering and calling remain Department-scoped. Ordering is due appointments first, then FIFO walk-ins. The API is the queue authority. A display receives only its department name and anonymous visit codes. No patient identifiers are collected.
+Each Department issues its own daily ticket numbers, starting at `001`; a forwarded visit receives a number in the destination Department. The clinic-wide visit code remains stable for receipt lookup and continuity. Reception reprints by visit code plus clinic date. Kiosk issue is walk-in only and prints through an explicit browser print action. Service determines each step's Department. Staff see/call only their assigned Services within it; ordering is due appointments first, then FIFO walk-ins across those Services. The API is the queue authority. Displays show anonymous Department ticket numbers only. No patient identifiers are collected.
+
+Staff accounts are individually authenticated and Admin assigns each account to one or more Services. Staff queue reads and actions are restricted to assigned Services; unassigned Services in the same Department are excluded. The approved migration backfills existing Staff Department assignments to that Department's Services. See [SPEC-011](docs/specs/011-service-scoped-staff-access/spec.md).
 
 This is a local MVP implementation. The opt-in MySQL and browser workflow is recorded in SPEC-005; it does not establish backup/restore readiness, multi-instance behavior, or production readiness. Use synthetic visits and a dedicated local database.
 
@@ -41,14 +43,14 @@ Run the API and frontend in separate terminals:
 ```sh
 ASPNETCORE_ENVIRONMENT=Development dotnet run --no-launch-profile --project backend/Queuing.Api --urls http://127.0.0.1:5271
 npm --prefix frontend ci
-npm --prefix frontend run dev -- --host 127.0.0.1
+npm --prefix frontend run dev -- --host 127.0.0.1 --port 5174 --strictPort
 ```
 
-The default Vite development session opens the Admin workspace without sign-in so clinic configuration can be prepared before accounts exist. For frontend route previews, open `http://127.0.0.1:5173/reception` or `/department`; the page uses a local synthetic role based on the URL. This frontend preview does not authenticate Reception or Staff API requests, so issuing visits and loading or operating department queues still require a real account. Admin configuration API access remains available only when `LocalSetup:Enabled` is true, ASP.NET Core is in `Development`, and both the request Host and remote address are loopback. Keep both servers bound to `127.0.0.1`; Admin changes in this mode have no authenticated actor ID in the audit record.
+The default Vite development session opens the Admin workspace without sign-in so clinic configuration can be prepared before accounts exist. Use Admin's **Sign out** control to exit the bypass for the current browser tab and reach the normal login page. `/reception` and `/department` require real Reception and Staff accounts and redirect signed-out users to `/login`. Admin configuration API access remains available only when `LocalSetup:Enabled` is true, ASP.NET Core is in `Development`, and both the request Host and remote address are loopback. Keep both servers bound to `127.0.0.1`; Admin changes in this mode have no authenticated actor ID in the audit record.
 
-To use the regular login flow locally, start Vite with `VITE_LOCAL_SETUP_MODE=false` and the API with `LocalSetup__Enabled=false`. A production Vite build does not enable the frontend bypass. See [SPEC-007](docs/specs/007-local-admin-setup-mode/spec.md).
+Reception and Staff login works with the default local setup mode. To require an authenticated Admin session too, start Vite with `VITE_LOCAL_SETUP_MODE=false` and the API with `LocalSetup__Enabled=false`. A production Vite build does not enable the frontend bypass. See [SPEC-007](docs/specs/007-local-admin-setup-mode/spec.md).
 
-Open the frontend at `http://127.0.0.1:5173`. To pair a monitor, open `http://127.0.0.1:5173/display/pair` in a new tab on that monitor; after activation, leave the tab on the department display. To pair a kiosk, register it under Admin → Kiosks, create a pairing code, open `http://127.0.0.1:5173/kiosk/pair` on the kiosk device, then leave the browser at `/kiosk`. Vite forwards `/api` and `/hubs` to the local API.
+Open the frontend at `http://127.0.0.1:5174`. To pair a monitor, open `http://127.0.0.1:5174/display/pair` in a new tab on that monitor; after activation, leave the tab on the department display. To pair a kiosk, register it under Admin → Kiosks, create a pairing code, open `http://127.0.0.1:5174/kiosk/pair` on the kiosk device, then leave the browser at `/kiosk`. Vite forwards `/api` and `/hubs` to the local API.
 
 ## Checks
 
@@ -83,6 +85,8 @@ npm run test:e2e -- tests/e2e/clinic-mysql-integration.spec.js
 - `docs/specs/007-local-admin-setup-mode/` — temporary loopback-only no-login setup mode for local development.
 - `docs/specs/008-service-aware-visit-issue/` — service-based Reception issue, forwarding, and receipt reprint by daily code/date.
 - `docs/specs/009-self-service-kiosk/` — department-first walk-in kiosk, independent device pairing, API scope, responsive UI direction, and acceptance criteria.
+- `docs/specs/011-service-scoped-staff-access/` — Staff Service assignments, queue authorization, existing-account backfill, and verification criteria.
+- `docs/specs/012-department-ticket-numbering/` — independent Department daily tickets and lobby muted autoplay.
 - `docs/adr/0002-mysql-and-forwarding-visits.md` — selected MySQL provider and stable forwarded visit-code decisions.
 - `docs/CODEBASE_MAP.md`, `docs/STRUCTURE.md` — current source map and layout.
 - `skills/project-knowledge/SKILL.md` — default documentation and knowledge retention guidance.

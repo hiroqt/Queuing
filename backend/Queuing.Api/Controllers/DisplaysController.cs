@@ -21,13 +21,19 @@ public sealed class AdminDisplaysController(QueueDbContext db, TimeProvider cloc
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken cancellationToken) =>
         Ok(await db.DisplayDevices.AsNoTracking().OrderBy(device => device.Name)
-            .Select(device => new AdminDisplayDto(device.Id, device.Name, device.DepartmentId, device.Active, device.CredentialHash != null))
+            .Select(device => new AdminDisplayDto(device.Id, device.Name, device.DepartmentId,
+                device.DepartmentId == null ? "Lobby" : "Department", device.Active, device.CredentialHash != null))
             .ToArrayAsync(cancellationToken));
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateDisplayRequest request, CancellationToken cancellationToken)
     {
-        if (!await db.Departments.AnyAsync(department => department.Id == request.DepartmentId && department.Active, cancellationToken))
+        if ((request.Type == "Lobby" && request.DepartmentId is not null) ||
+            ((request.Type is "Department" or null) && request.DepartmentId is null) ||
+            request.Type is not ("Lobby" or "Department" or null))
+            return Problem(statusCode: 400, title: "Choose a display type and its matching department assignment.");
+        if (request.DepartmentId is { } departmentId &&
+            !await db.Departments.AnyAsync(department => department.Id == departmentId && department.Active, cancellationToken))
             return Problem(statusCode: 400, title: "Choose an active department.");
         var name = request.Name.Trim();
         if (name.Length < 2) return Problem(statusCode: 400, title: "Monitor name must contain at least two characters.");
@@ -35,7 +41,8 @@ public sealed class AdminDisplaysController(QueueDbContext db, TimeProvider cloc
         db.DisplayDevices.Add(display);
         AddAudit("display.created", display.Id);
         await db.SaveChangesAsync(cancellationToken);
-        return Created($"/api/v1/admin/displays/{display.Id}", new AdminDisplayDto(display.Id, display.Name, display.DepartmentId, display.Active, false));
+        return Created($"/api/v1/admin/displays/{display.Id}", new AdminDisplayDto(display.Id, display.Name, display.DepartmentId,
+            display.DepartmentId is null ? "Lobby" : "Department", display.Active, false));
     }
 
     [HttpPatch("{id:guid}")]
@@ -43,7 +50,7 @@ public sealed class AdminDisplaysController(QueueDbContext db, TimeProvider cloc
     {
         var display = await db.DisplayDevices.SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (display is null) return NotFound();
-        var hadCredential = display.CredentialHash is not null;
+        var previousCredentialHash = display.CredentialHash;
         if (request.DepartmentId is { } departmentId &&
             !await db.Departments.AnyAsync(department => department.Id == departmentId && department.Active, cancellationToken))
             return Problem(statusCode: 400, title: "Choose an active department.");
@@ -75,11 +82,12 @@ public sealed class AdminDisplaysController(QueueDbContext db, TimeProvider cloc
         }
         AddAudit("display.updated", display.Id);
         await db.SaveChangesAsync(cancellationToken);
-        if (hadCredential && display.CredentialHash is null)
+        if (previousCredentialHash is not null && display.CredentialHash is null)
         {
-            await hub.Clients.Group(QueueHub.DisplayGroupName(display.Id)).SendAsync("DisplayRevoked", cancellationToken);
+            await hub.Clients.Group(QueueHub.DisplayGroupName(display.Id, previousCredentialHash)).SendAsync("DisplayRevoked", cancellationToken);
         }
-        return Ok(new AdminDisplayDto(display.Id, display.Name, display.DepartmentId, display.Active, display.CredentialHash is not null));
+        return Ok(new AdminDisplayDto(display.Id, display.Name, display.DepartmentId,
+            display.DepartmentId is null ? "Lobby" : "Department", display.Active, display.CredentialHash is not null));
     }
 
     [HttpPost("{id:guid}/pairing-code")]
@@ -87,7 +95,7 @@ public sealed class AdminDisplaysController(QueueDbContext db, TimeProvider cloc
     {
         var display = await db.DisplayDevices.SingleOrDefaultAsync(item => item.Id == id && item.Active, cancellationToken);
         if (display is null) return NotFound();
-        var hadCredential = display.CredentialHash is not null;
+        var previousCredentialHash = display.CredentialHash;
         var code = Convert.ToHexString(RandomNumberGenerator.GetBytes(5));
         display.PairingCodeHash = DisplayDeviceAuthHandler.Hash(code);
         display.PairingExpiresAtUtc = clock.GetUtcNow().AddMinutes(10);
@@ -95,9 +103,9 @@ public sealed class AdminDisplaysController(QueueDbContext db, TimeProvider cloc
         display.PairedAtUtc = null;
         AddAudit("display.pairing-code-created", display.Id);
         await db.SaveChangesAsync(cancellationToken);
-        if (hadCredential)
+        if (previousCredentialHash is not null)
         {
-            await hub.Clients.Group(QueueHub.DisplayGroupName(display.Id)).SendAsync("DisplayRevoked", cancellationToken);
+            await hub.Clients.Group(QueueHub.DisplayGroupName(display.Id, previousCredentialHash)).SendAsync("DisplayRevoked", cancellationToken);
         }
         return Ok(new { code });
     }
@@ -124,7 +132,7 @@ public sealed class DisplayActivationController(QueueDbContext db, TimeProvider 
             item.PairingExpiresAtUtc > clock.GetUtcNow(), cancellationToken);
         if (display is null) return Problem(statusCode: 400, title: "The pairing code is invalid or expired.");
 
-        var hadCredential = display.CredentialHash is not null;
+        var previousCredentialHash = display.CredentialHash;
         var credential = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
         display.CredentialHash = DisplayDeviceAuthHandler.Hash(credential);
         display.PairingCodeHash = null;
@@ -147,11 +155,11 @@ public sealed class DisplayActivationController(QueueDbContext db, TimeProvider 
             Path = "/",
             MaxAge = TimeSpan.FromDays(30)
         });
-        if (hadCredential)
+        if (previousCredentialHash is not null)
         {
-            await hub.Clients.Group(QueueHub.DisplayGroupName(display.Id)).SendAsync("DisplayRevoked", cancellationToken);
+            await hub.Clients.Group(QueueHub.DisplayGroupName(display.Id, previousCredentialHash)).SendAsync("DisplayRevoked", cancellationToken);
         }
-        return Ok(new { paired = true });
+        return Ok(new { paired = true, displayType = display.DepartmentId is null ? "Lobby" : "Department" });
     }
 
     [HttpPost("logout")]
@@ -166,6 +174,7 @@ public sealed class DisplayActivationController(QueueDbContext db, TimeProvider 
     [Authorize(Policy = "DisplayDevice")]
     public async Task<IActionResult> GetSnapshot(CancellationToken cancellationToken)
     {
+        if (User.FindFirst("display_type")?.Value != "Department") return Forbid();
         if (!Guid.TryParse(User.FindFirst("department_id")?.Value, out var departmentId)) return Forbid();
         var departmentName = await db.Departments.Where(item => item.Id == departmentId && item.Active)
             .Select(item => item.Name).SingleOrDefaultAsync(cancellationToken);
@@ -180,17 +189,22 @@ public sealed class DisplayActivationController(QueueDbContext db, TimeProvider 
             .ThenBy(step => step.EnteredAtUtc)
             .ThenBy(step => step.Visit.ClinicDate)
             .ThenBy(step => step.Visit.Sequence)
-            .Select(step => new DisplayQueueTicket(step.Visit.VisitCode, step.State.ToString()))
+            .Select(step => new { step.DepartmentTicketNumber, step.Visit.VisitCode, Status = step.State.ToString() })
             .ToArrayAsync(cancellationToken);
         return Ok(new DisplaySnapshotDto(departmentName,
-            items.Where(item => item.Status == nameof(DepartmentStepState.Pending)).ToArray(),
-            items.Where(item => item.Status == nameof(DepartmentStepState.Called)).ToArray()));
+            items.Where(item => item.Status == nameof(DepartmentStepState.Pending))
+                .Select(item => new DisplayQueueTicket(item.DepartmentTicketNumber, item.VisitCode, item.Status)).ToArray(),
+            items.Where(item => item.Status == nameof(DepartmentStepState.Called))
+                .Select(item => new DisplayQueueTicket(item.DepartmentTicketNumber, item.VisitCode, item.Status)).ToArray()));
     }
 }
 
-public sealed record CreateDisplayRequest([Required, StringLength(100, MinimumLength = 2)] string Name, Guid DepartmentId);
+public sealed record CreateDisplayRequest([Required, StringLength(100, MinimumLength = 2)] string Name, Guid? DepartmentId, string? Type = null);
 public sealed record UpdateDisplayRequest([StringLength(100, MinimumLength = 2)] string? Name, Guid? DepartmentId, bool? Active);
 public sealed record ActivateDisplayRequest([Required, StringLength(20, MinimumLength = 8)] string Code);
-public sealed record AdminDisplayDto(Guid Id, string Name, Guid DepartmentId, bool Active, bool Paired);
-public sealed record DisplayQueueTicket(string VisitCode, string Status);
+public sealed record AdminDisplayDto(Guid Id, string Name, Guid? DepartmentId, string Type, bool Active, bool Paired);
+public sealed record DisplayQueueTicket(int? DepartmentTicketNumber, string VisitCode, string Status)
+{
+    public string TicketNumber => DepartmentTicketNumber?.ToString("D3", System.Globalization.CultureInfo.InvariantCulture) ?? VisitCode;
+}
 public sealed record DisplaySnapshotDto(string DepartmentName, DisplayQueueTicket[] Waiting, DisplayQueueTicket[] Called);

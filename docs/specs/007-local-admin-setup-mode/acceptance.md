@@ -1,12 +1,13 @@
 # Acceptance record — SPEC-007
 
-**Status:** Implemented and locally verified on 2026-10-21. The API integration used a disposable MySQL 8.4 `queuing_test` database; its container was stopped after the run.
+**Status:** Implemented and locally verified on 2026-10-21; Reception/Staff route behavior updated and verified on 2026-10-24. The API integration used a disposable MySQL 8.4 `queuing_test` database; its container was stopped after the run.
 
-The follow-up Admin navigation change adds a direct `/admin/departments` route. Its local-setup browser assertion remains pending rerun. The authenticated Admin browser flow reached the UI but stopped at an ambiguous sidebar link locator; that selector is corrected, and rerun is pending. The evidence below records the earlier SPEC-007 verification.
+The follow-up Admin navigation change adds a direct `/admin/departments` route. The updated route/auth behavior has now been verified in a mocked local-setup browser run. Earlier evidence remains below; current follow-up evidence is listed after it.
 
 | Requirement | Evidence | Status |
 |---|---|---|
-| Vite development opens Admin without a login screen or session request | Earlier Playwright run verified `/` reaches Admin, the Clinic configuration page and local-mode label appear, and no session/login request is made. The follow-up `/admin/departments` route assertion is pending rerun. | Follow-up pending |
+| Vite development opens Admin without a login screen or session request | Playwright verified `/` reaches Admin, the Clinic configuration page and local-mode label appear, and no session/login request is made. | Passed |
+| Reception and Staff routes require their real role accounts, then return to the requested workspace | Mocked Playwright verified `/reception` and `/department` redirect signed-out users to login, Reception and Staff sign-ins reach their respective routes, and Reception cannot open the Staff workspace. | Passed |
 | Anonymous loopback Admin configuration read/write works with antiforgery | Opt-in MySQL/API integration read the Admin services endpoint and created a department using the existing CSRF client without a login cookie | Passed |
 | Local setup does not grant queue access | Same API integration requested an anonymous department queue and received `401` | Passed |
 | Real signed-in setup and queue workflows remain usable | Opt-in MySQL browser/API workflow completed Admin config, login, reception issue, staff queue, and paired display flow | Passed |
@@ -25,4 +26,10 @@ Commands and outcomes:
 - `QUEUING_MYSQL_E2E=1 npm run test:e2e -- tests/e2e/clinic-mysql-integration.spec.js` — 1 passed against disposable MySQL 8.4.
 - `git diff --check` — passed.
 
-No database schema changed. Admin actions made without a signed-in administrator have a null audit actor ID. Keep Vite and the API loopback-bound and turn off `VITE_LOCAL_SETUP_MODE` and `LocalSetup:Enabled` before using a shared or network-exposed environment.
+Current follow-up evidence (2026-10-24):
+
+- `QUEUING_LOCAL_SETUP_E2E=1 npm run test:e2e -- --config playwright.local-setup.config.js tests/e2e/local-setup-mode.spec.js` — 2 passed, including local Admin bypass and authenticated role routing.
+- The configured local development database had `20261024003422_ServiceScopedStaffAccess` pending while the later Lobby migration was applied. Applied the pending Service migration with the latest migration as the target; existing Lobby tables/data were retained and the migration backfill completed.
+- Restarted the local API in Development on `127.0.0.1:5271`. Read-only checks returned `200` for local Admin setup, `401` for anonymous Reception services, and an unauthenticated session as expected.
+
+Admin actions made without a signed-in administrator have a null audit actor ID. Keep Vite and the API loopback-bound and turn off `VITE_LOCAL_SETUP_MODE` and `LocalSetup:Enabled` before using a shared or network-exposed environment.

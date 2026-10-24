@@ -63,6 +63,22 @@ internal static class VisitCommandSupport
     public static string Hash(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 
+    public static async Task<int> NextDepartmentTicketNumberAsync(
+        QueueDbContext db, Guid departmentId, DateOnly clinicDate, CancellationToken cancellationToken)
+    {
+        var dateValue = clinicDate.ToDateTime(TimeOnly.MinValue);
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO `DepartmentSequences` (`DepartmentId`, `ClinicDate`, `LastSequence`) VALUES ({departmentId}, {dateValue}, 1) ON DUPLICATE KEY UPDATE `LastSequence` = `LastSequence` + 1",
+            cancellationToken);
+        var sequence = await db.DepartmentSequences.FromSqlInterpolated(
+                $"SELECT * FROM `DepartmentSequences` WHERE `DepartmentId` = {departmentId} AND `ClinicDate` = {dateValue} FOR UPDATE")
+            .SingleAsync(cancellationToken);
+        return sequence.LastSequence;
+    }
+
+    public static DateOnly ClinicDateAt(DateTimeOffset instant) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(instant, ClinicTimeZone).DateTime);
+
     public static (DateTimeOffset? Value, bool IsInvalid) ParseClinicLocalTime(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return (null, false);

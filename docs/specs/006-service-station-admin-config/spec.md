@@ -113,6 +113,7 @@ Invalid input or cross-department assignment returns `400`; duplicate names retu
 4. Given a non-Admin or anonymous caller, when they call a Service or Station administration route, then the API returns `403` or `401` respectively, except when the explicit SPEC-007 local Development + loopback mode is active.
 5. Given duplicate same-department names or duplicate assignment IDs, when an Admin submits them, then the API returns a clear conflict/validation error and does not persist duplicates.
 6. Given an assigned Staff user, when an Admin deactivates them, changes their role away from Staff, or removes the Station's Department from their assignments, then incompatible Station-Staff links are removed atomically.
+7. Given an inactive Department, when an Admin reactivates it, then the existing Department update API persists its active state and the Admin list shows it as Active.
 7. Given existing SPEC-005 visits and DepartmentSteps, when the migration is applied, then queue records and API behavior remain unchanged.
 8. Given an Admin in the existing React workspace, when they create and update Services and Stations, then the page shows saved configuration, associated department/services/staff, and understandable errors without a design-system change.
 9. Given an Admin opening `/admin`, when they choose an Administration section, then only that section's configuration is shown at a direct route that supports refresh and browser history; the existing local setup and authenticated Admin access paths continue to work.

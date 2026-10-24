@@ -3,6 +3,8 @@
 **Status:** Approved · implementation added; verification incomplete · **Date:** 2026-10-22
 **Extends:** [SPEC-005](../005-forwarding-clinic-queue/spec.md), [SPEC-008](../008-service-aware-visit-issue/spec.md)
 
+**Current follow-up:** [SPEC-012](../012-department-ticket-numbering/spec.md) adds Department-local daily ticket numbers to kiosk receipts; the clinic-wide visit code remains available as a receipt lookup reference.
+
 ## Goal
 
 Let a walk-in issue their own anonymous queue ticket by choosing a Department and then a Service, while keeping Reception and the database-backed queue authority intact.

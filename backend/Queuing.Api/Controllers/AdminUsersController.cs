@@ -29,19 +29,23 @@ public sealed class AdminUsersController(
         var assignments = await db.UserDepartments.AsNoTracking().ToArrayAsync(cancellationToken);
         var departmentIdsByUser = assignments.GroupBy(item => item.UserId)
             .ToDictionary(group => group.Key, group => group.Select(item => item.DepartmentId).ToArray());
+        var serviceAssignments = await db.UserServices.AsNoTracking().ToArrayAsync(cancellationToken);
+        var serviceIdsByUser = serviceAssignments.GroupBy(item => item.UserId)
+            .ToDictionary(group => group.Key, group => group.Select(item => item.ServiceId).ToArray());
         return Ok(accounts.Select(user => new AdminUserDto(
             user.Id, user.UserName ?? "", user.DisplayName,
             roleByUserId.GetValueOrDefault(user.Id, ""),
-            departmentIdsByUser.GetValueOrDefault(user.Id, []), user.Active)));
+            departmentIdsByUser.GetValueOrDefault(user.Id, []), user.Active,
+            serviceIdsByUser.GetValueOrDefault(user.Id, []))));
     }
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateUserRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.UserName) || !ValidRole(request.Role) ||
-            !await ValidAssignments(request.Role, request.DepartmentIds, cancellationToken))
+            !await ValidAssignments(request.Role, request.ServiceIds, null, cancellationToken))
         {
-            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Choose a valid role and active department assignments.");
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Choose a valid role and active Service assignments.");
         }
 
         var oneTimeCredential = CreateTemporaryPassword();
@@ -60,6 +64,7 @@ public sealed class AdminUsersController(
             return Problem(statusCode: StatusCodes.Status400BadRequest, title: "The user could not be created.", detail: string.Join(" ", created.Errors.Select(error => error.Description)));
         }
 
+        var departmentIds = await GetDepartmentIdsAsync(request.ServiceIds, cancellationToken);
         try
         {
             if (!await roles.RoleExistsAsync(request.Role))
@@ -69,7 +74,8 @@ public sealed class AdminUsersController(
             }
             var roleAdded = await users.AddToRoleAsync(user, request.Role);
             if (!roleAdded.Succeeded) throw new InvalidOperationException("Could not assign the role.");
-            AddAssignments(user.Id, request.DepartmentIds);
+            AddAssignments(user.Id, departmentIds);
+            AddServiceAssignments(user.Id, request.ServiceIds);
             AddAudit("user.created", "user", user.Id);
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -80,7 +86,7 @@ public sealed class AdminUsersController(
         }
 
         return Created($"/api/v1/admin/users/{user.Id}", new AdminUserDto(
-            user.Id, user.UserName!, user.DisplayName, request.Role, request.DepartmentIds, user.Active, oneTimeCredential));
+            user.Id, user.UserName!, user.DisplayName, request.Role, departmentIds, user.Active, request.ServiceIds, oneTimeCredential));
     }
 
     [HttpPatch("{id:guid}")]
@@ -88,9 +94,10 @@ public sealed class AdminUsersController(
     {
         var user = await users.FindByIdAsync(id.ToString());
         if (user is null) return NotFound();
-        if (!ValidRole(request.Role) || !await ValidAssignments(request.Role, request.DepartmentIds, cancellationToken))
+        var currentServiceIds = await db.UserServices.Where(item => item.UserId == id).Select(item => item.ServiceId).ToArrayAsync(cancellationToken);
+        if (!ValidRole(request.Role) || !await ValidAssignments(request.Role, request.ServiceIds, id, cancellationToken))
         {
-            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Choose a valid role and active department assignments.");
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Choose a valid role and active Service assignments.");
         }
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
@@ -107,16 +114,25 @@ public sealed class AdminUsersController(
         var added = await users.AddToRoleAsync(user, request.Role);
         if (!added.Succeeded) return Problem(statusCode: StatusCodes.Status500InternalServerError, title: "Could not update user roles.");
 
+        var requestedDepartmentIds = request.Role != QueueRoles.Staff
+            ? []
+            : request.ServiceIds.Length == 0 && currentServiceIds.Length == 0
+                ? await db.UserDepartments.Where(item => item.UserId == id).Select(item => item.DepartmentId).ToArrayAsync(cancellationToken)
+                : await GetDepartmentIdsAsync(request.ServiceIds, cancellationToken);
         HashSet<Guid> retainedDepartmentIds = request.Role == QueueRoles.Staff && request.Active
-            ? request.DepartmentIds.ToHashSet()
+            ? requestedDepartmentIds.ToHashSet()
             : [];
         var stationAssignments = await db.StationStaff.Where(item => item.UserId == id).ToListAsync(cancellationToken);
         db.StationStaff.RemoveRange(stationAssignments.Where(item => !retainedDepartmentIds.Contains(item.DepartmentId)));
 
         var currentAssignments = await db.UserDepartments.Where(item => item.UserId == id).ToListAsync(cancellationToken);
-        var requestedDepartmentIds = request.DepartmentIds.ToHashSet();
-        db.UserDepartments.RemoveRange(currentAssignments.Where(item => !requestedDepartmentIds.Contains(item.DepartmentId)));
-        AddAssignments(id, requestedDepartmentIds.Except(currentAssignments.Select(item => item.DepartmentId)));
+        var requestedDepartments = requestedDepartmentIds.ToHashSet();
+        db.UserDepartments.RemoveRange(currentAssignments.Where(item => !requestedDepartments.Contains(item.DepartmentId)));
+        AddAssignments(id, requestedDepartments.Except(currentAssignments.Select(item => item.DepartmentId)));
+        var currentServiceAssignments = await db.UserServices.Where(item => item.UserId == id).ToListAsync(cancellationToken);
+        var requestedServices = request.Role == QueueRoles.Staff ? request.ServiceIds.ToHashSet() : [];
+        db.UserServices.RemoveRange(currentServiceAssignments.Where(item => !requestedServices.Contains(item.ServiceId)));
+        AddServiceAssignments(id, requestedServices.Except(currentServiceAssignments.Select(item => item.ServiceId)));
         user.Active = request.Active;
         user.DisplayName = request.DisplayName?.Trim() ?? user.DisplayName;
         var stampUpdated = await users.UpdateSecurityStampAsync(user);
@@ -127,27 +143,85 @@ public sealed class AdminUsersController(
         AddAudit("user.updated", "user", user.Id);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return Ok(new AdminUserDto(user.Id, user.UserName!, user.DisplayName, request.Role, request.DepartmentIds, user.Active));
+        return Ok(new AdminUserDto(user.Id, user.UserName!, user.DisplayName, request.Role, requestedDepartmentIds, user.Active,
+            request.Role == QueueRoles.Staff ? request.ServiceIds : []));
     }
 
-    private async Task<bool> ValidAssignments(string role, Guid[] departmentIds, CancellationToken cancellationToken)
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        var unique = departmentIds.Distinct().ToArray();
-        if (unique.Length != departmentIds.Length ||
-            (role == QueueRoles.Staff && unique.Length == 0) ||
+        var user = await users.FindByIdAsync(id.ToString());
+        if (user is null) return NotFound();
+
+        var isAdmin = await users.IsInRoleAsync(user, QueueRoles.Admin);
+        if (isAdmin && user.Active)
+        {
+            var activeAdmins = await users.GetUsersInRoleAsync(QueueRoles.Admin);
+            if (activeAdmins.Count(candidate => candidate.Active) <= 1)
+                return Problem(statusCode: StatusCodes.Status409Conflict, title: "The last active administrator cannot be deleted.");
+        }
+
+        if (await db.Visits.AsNoTracking().AnyAsync(visit => visit.IssuedByUserId == id, cancellationToken))
+        {
+            return Problem(statusCode: StatusCodes.Status409Conflict,
+                title: "This account has visit history.", detail: "Deactivate it to keep those records.");
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        db.StationStaff.RemoveRange(db.StationStaff.Where(item => item.UserId == id));
+        db.UserServices.RemoveRange(db.UserServices.Where(item => item.UserId == id));
+        db.UserDepartments.RemoveRange(db.UserDepartments.Where(item => item.UserId == id));
+        AddAudit("user.deleted", "user", user.Id);
+        var result = await users.DeleteAsync(user);
+        if (!result.Succeeded)
+            return Problem(statusCode: StatusCodes.Status409Conflict, title: "This user could not be deleted.", detail: string.Join(" ", result.Errors.Select(error => error.Description)));
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return NoContent();
+    }
+
+    private async Task<bool> ValidAssignments(string role, Guid[] serviceIds, Guid? existingUserId, CancellationToken cancellationToken)
+    {
+        var unique = serviceIds.Distinct().ToArray();
+        if (unique.Length != serviceIds.Length ||
             (role != QueueRoles.Staff && unique.Length != 0)) return false;
-        if (unique.Length == 0) return true;
-        var activeDepartmentIds = await db.Departments.AsNoTracking()
-            .Where(department => department.Active)
-            .Select(department => department.Id)
-            .ToArrayAsync(cancellationToken);
-        return unique.All(activeDepartmentIds.Contains);
+        if (unique.Length == 0)
+        {
+            return role != QueueRoles.Staff || existingUserId is { } legacyUserId &&
+                !await db.UserServices.AnyAsync(item => item.UserId == legacyUserId, cancellationToken);
+        }
+        var alreadyAssigned = existingUserId is { } userId
+            ? await db.UserServices.AsNoTracking().Where(item => item.UserId == userId)
+                .Select(item => item.ServiceId).ToArrayAsync(cancellationToken)
+            : [];
+        foreach (var serviceId in unique)
+        {
+            var active = await db.Services.AsNoTracking().AnyAsync(service => service.Id == serviceId && service.Active &&
+                db.Departments.Any(department => department.Id == service.DepartmentId && department.Active), cancellationToken);
+            if (!active && !alreadyAssigned.Contains(serviceId)) return false;
+        }
+        return true;
+    }
+
+    private async Task<Guid[]> GetDepartmentIdsAsync(Guid[] serviceIds, CancellationToken cancellationToken)
+    {
+        var departmentIds = new HashSet<Guid>();
+        foreach (var serviceId in serviceIds)
+        {
+            var departmentId = await db.Services.AsNoTracking().Where(service => service.Id == serviceId)
+                .Select(service => service.DepartmentId).SingleAsync(cancellationToken);
+            departmentIds.Add(departmentId);
+        }
+        return departmentIds.ToArray();
     }
 
     private static bool ValidRole(string role) => role is QueueRoles.Admin or QueueRoles.Reception or QueueRoles.Staff;
 
     private void AddAssignments(Guid userId, IEnumerable<Guid> departmentIds) =>
         db.UserDepartments.AddRange(departmentIds.Select(departmentId => new UserDepartment { UserId = userId, DepartmentId = departmentId }));
+
+    private void AddServiceAssignments(Guid userId, IEnumerable<Guid> serviceIds) =>
+        db.UserServices.AddRange(serviceIds.Select(serviceId => new UserService { UserId = userId, ServiceId = serviceId }));
 
     private void AddAudit(string action, string type, Guid id) => db.AuditRecords.Add(new AuditRecord
     {
@@ -166,7 +240,7 @@ public sealed record CreateUserRequest(
     [Required, StringLength(100, MinimumLength = 2)] string UserName,
     [StringLength(120, MinimumLength = 2)] string? DisplayName,
     [Required] string Role,
-    [Required] Guid[] DepartmentIds);
+    [Required] Guid[] ServiceIds);
 
-public sealed record UpdateUserRequest([Required] string Role, [Required] Guid[] DepartmentIds, bool Active, string? DisplayName);
-public sealed record AdminUserDto(Guid Id, string UserName, string DisplayName, string Role, Guid[] DepartmentIds, bool Active, string? OneTimeCredential = null);
+public sealed record UpdateUserRequest([Required] string Role, [Required] Guid[] ServiceIds, bool Active, string? DisplayName);
+public sealed record AdminUserDto(Guid Id, string UserName, string DisplayName, string Role, Guid[] DepartmentIds, bool Active, Guid[] ServiceIds, string? OneTimeCredential = null);

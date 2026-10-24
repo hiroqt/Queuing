@@ -73,13 +73,14 @@ public sealed class ReceptionVisitsController(QueueDbContext db, VisitIssuanceSe
                 ServiceName = step.Service == null ? null : step.Service.Name,
                 step.DepartmentId,
                 DepartmentName = step.Department.Name,
-                step.AppointmentAtUtc
+                step.AppointmentAtUtc,
+                step.DepartmentTicketNumber
             })
             .FirstOrDefaultAsync(cancellationToken);
         if (receipt is null) return NotFound();
         return Ok(new IssuedVisitDto(
             receipt.Id, receipt.VisitCode, receipt.ClinicDate, receipt.ServiceId, receipt.ServiceName,
-            receipt.DepartmentId, receipt.DepartmentName, receipt.AppointmentAtUtc, receipt.IssuedAtUtc));
+            receipt.DepartmentId, receipt.DepartmentName, receipt.AppointmentAtUtc, receipt.IssuedAtUtc, receipt.DepartmentTicketNumber));
     }
 }
 

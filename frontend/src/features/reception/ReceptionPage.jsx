@@ -56,7 +56,7 @@ export default function ReceptionPage() {
       setLookupCode(issued.visitCode);
       setClinicDate(issued.clinicDate);
       issueKey.current = null;
-      setMessage(`Visit ${issued.visitCode} issued. Keep this code for the whole clinic visit.`);
+      setMessage(`Ticket ${issued.ticketNumber ?? issued.visitCode} issued for ${issued.departmentName}.`);
     } catch (cause) {
       setError(cause.message);
     } finally {
@@ -81,12 +81,12 @@ export default function ReceptionPage() {
         <div>
           <p className="eyebrow">RECEPTION DESK</p>
           <h1 id="reception-heading">Issue a visit</h1>
-          <p>Choose the first service and issue one code for the patient’s full clinic visit.</p>
+          <p>Choose a service to issue that department’s ticket number and a clinic visit code for lookup.</p>
         </div>
         <aside className="reception-numbering" aria-label="Ticket numbering">
           <span className="eyebrow">TICKET NUMBERING</span>
-          <strong>One code per visit</strong>
-          <span>Clinic-wide · resets daily in Asia/Manila</span>
+          <strong>Each department has its own number</strong>
+          <span>Resets daily in Asia/Manila; the visit code stays the same when forwarded.</span>
         </aside>
       </div>
 
@@ -146,10 +146,11 @@ export default function ReceptionPage() {
                   </div>
                   <button className="button button-dark no-print" type="button" onClick={() => window.print()}>Print / reprint</button>
                 </div>
-                <p className="receipt-number">{visit.visitCode}</p>
+                <p className="receipt-number">{visit.ticketNumber ?? visit.visitCode}</p>
                 <p className="receipt-service">{visit.serviceName} · {visit.departmentName}</p>
+                <p className="receipt-reference">Visit code: {visit.visitCode}</p>
                 <p className="receipt-time">Appointment: {clinicTime(visit.appointmentAtUtc)}</p>
-                <p className="receipt-note">Keep this code as the visit moves between departments.</p>
+                <p className="receipt-note">Listen for your department ticket number. Use the visit code above for receipt lookup.</p>
               </article>
             ) : (
               <div className="reception-ticket-empty">

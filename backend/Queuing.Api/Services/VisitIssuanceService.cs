@@ -52,6 +52,9 @@ public sealed class VisitIssuanceService(QueueDbContext db, TimeProvider clock)
             .SingleOrDefaultAsync(cancellationToken);
         if (service is null) return VisitIssueResult.Failure(400, "Choose an active service.");
 
+        var departmentTicketNumber = await VisitCommandSupport.NextDepartmentTicketNumberAsync(
+            db, service.DepartmentId, clinicDate, cancellationToken);
+
         dailySequence.LastSequence++;
         var visit = new Visit
         {
@@ -70,6 +73,8 @@ public sealed class VisitIssuanceService(QueueDbContext db, TimeProvider clock)
             VisitId = visit.Id,
             DepartmentId = service.DepartmentId,
             ServiceId = service.Id,
+            TicketDate = clinicDate,
+            DepartmentTicketNumber = departmentTicketNumber,
             AppointmentAtUtc = appointmentAtUtc.Value,
             State = DepartmentStepState.Pending,
             EnteredAtUtc = now
@@ -79,7 +84,7 @@ public sealed class VisitIssuanceService(QueueDbContext db, TimeProvider clock)
         visit.CurrentStepId = step.Id;
         var receipt = new IssuedVisitDto(
             visit.Id, visit.VisitCode, clinicDate, service.Id, service.Name, service.DepartmentId,
-            service.DepartmentName, step.AppointmentAtUtc, visit.IssuedAtUtc);
+            service.DepartmentName, step.AppointmentAtUtc, visit.IssuedAtUtc, departmentTicketNumber);
         VisitCommandSupport.SaveCommand(db, clock, scope, key, requestHash, visit.Id, receipt);
         VisitCommandSupport.AddAudit(db, clock, userId, correlationId, "visit.issued", "visit", visit.Id, kioskDeviceId);
         VisitCommandSupport.AddOutbox(db, clock, visit.Id, service.DepartmentId);
@@ -97,4 +102,7 @@ public sealed record VisitIssueResult(IssuedVisitDto? Receipt, string? Error, in
 }
 
 public sealed record IssueVisitRequest(Guid InitialServiceId, string? AppointmentAtLocal);
-public sealed record IssuedVisitDto(Guid Id, string VisitCode, DateOnly ClinicDate, Guid? ServiceId, string? ServiceName, Guid DepartmentId, string DepartmentName, DateTimeOffset? AppointmentAtUtc, DateTimeOffset IssuedAtUtc);
+public sealed record IssuedVisitDto(Guid Id, string VisitCode, DateOnly ClinicDate, Guid? ServiceId, string? ServiceName, Guid DepartmentId, string DepartmentName, DateTimeOffset? AppointmentAtUtc, DateTimeOffset IssuedAtUtc, int? DepartmentTicketNumber = null)
+{
+    public string TicketNumber => DepartmentTicketNumber?.ToString("D3", CultureInfo.InvariantCulture) ?? VisitCode;
+}
