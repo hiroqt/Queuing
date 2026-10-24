@@ -75,7 +75,10 @@ export default function DepartmentsSection() {
         <li key={department.id}>
           <span>{department.name}</span>
           <span className="enabled-label">{department.active ? "Active" : "Inactive"}</span>
-          <button className="text-button" type="button" disabled={!department.active} onClick={() => act(() => departmentApi.update(department.id, { active: false }), `${department.name} deactivated.`)}>Deactivate</button>
+          <button className="text-button" type="button" onClick={() => {
+            const active = !department.active;
+            return act(() => departmentApi.update(department.id, { active }), `${department.name} ${active ? "reactivated" : "deactivated"}.`);
+          }}>{department.active ? "Deactivate" : "Reactivate"}</button>
         </li>
       ))}</ul>}
     </section>

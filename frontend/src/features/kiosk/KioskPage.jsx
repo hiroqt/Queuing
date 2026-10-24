@@ -160,9 +160,10 @@ export default function KioskPage() {
 
         {!loading && !error && stage === "receipt" && receipt && <section className="kiosk-panel kiosk-result" aria-labelledby="receipt-heading" aria-live="polite">
           <p className="kiosk-kicker">YOUR VISIT NUMBER</p>
-          <h2 id="receipt-heading" className="kiosk-ticket-number">{receipt.visitCode}</h2>
+          <h2 id="receipt-heading" className="kiosk-ticket-number">{receipt.ticketNumber ?? receipt.visitCode}</h2>
           <div className="kiosk-perforation" aria-hidden="true" />
           <p className="kiosk-ticket-label">Please keep this number and listen for it to be called.</p>
+          <p className="kiosk-ticket-label">Visit code for receipt lookup: {receipt.visitCode}</p>
           <dl className="kiosk-confirmation kiosk-ticket-details"><div><dt>Department</dt><dd>{receipt.departmentName}</dd></div><div><dt>Service</dt><dd>{receipt.serviceName}</dd></div><div><dt>Date</dt><dd>{receipt.clinicDate}</dd></div></dl>
           <div className="kiosk-actions kiosk-actions-spread no-print"><button className="kiosk-button kiosk-button-secondary" type="button" onClick={() => window.print()}>Print ticket</button><button className="kiosk-button kiosk-button-primary" type="button" onClick={startOver}>Start over</button></div>
         </section>}
