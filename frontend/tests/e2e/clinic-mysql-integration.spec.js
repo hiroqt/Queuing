@@ -253,11 +253,13 @@ test("MySQL API and browser preserve visit flow, authorization, and login-free d
     const staffServiceIds = (await staffServiceChoices.json()).map((service) => service.id);
     expect(staffServiceIds).toEqual(expect.arrayContaining([xrayService.id, ecgService.id]));
     expect(staffServiceIds).not.toContain(inactiveService.id);
-    const issue = async (serviceId, appointmentAtLocal, key = randomUUID()) => {
-      const response = await mutate(reception, "/api/v1/visits", "POST", {
+    const issue = async (serviceId, appointmentAtLocal, key = randomUUID(), referenceId = null) => {
+      const payload = {
         initialServiceId: serviceId,
         appointmentAtLocal,
-      }, { "Idempotency-Key": key });
+      };
+      if (referenceId) payload.referenceId = referenceId;
+      const response = await mutate(reception, "/api/v1/visits", "POST", payload, { "Idempotency-Key": key });
       return { response, key };
     };
     const inactiveIssue = await issue(inactiveService.id, null);
@@ -309,7 +311,8 @@ test("MySQL API and browser preserve visit flow, authorization, and login-free d
     const concurrentIssueBodies = concurrentIssueResults.map(({ body }) => JSON.parse(body));
     expect(concurrentIssueBodies[0].id).toBe(concurrentIssueBodies[1].id);
     expect(concurrentIssueBodies[0].departmentTicketNumber).toBe(concurrentIssueBodies[1].departmentTicketNumber);
-    const due = await issue(xrayService.id, clinicLocalDateTime(-5));
+    const sharedReference = `REF-${suffix}`;
+    const due = await issue(xrayService.id, clinicLocalDateTime(-5), randomUUID(), sharedReference);
     expect(due.response.status()).toBe(201);
     const dueVisit = await due.response.json();
     const walkIn = await issue(xrayService.id, null);
@@ -354,7 +357,8 @@ test("MySQL API and browser preserve visit flow, authorization, and login-free d
     expect(await forward.json()).toMatchObject({ visitCode: dueVisit.visitCode, nextDepartmentId: ecg.id, nextServiceId: ecgService.id, nextDepartmentTicketNumber: 2 });
     const originalReceipt = await reception.get(`/api/v1/reception/visits/receipt?visitCode=${dueVisit.visitCode}&clinicDate=${dueVisit.clinicDate}`);
     expect(originalReceipt.status()).toBe(200);
-    expect(await originalReceipt.json()).toMatchObject({
+    const originalReceiptBody = await originalReceipt.json();
+    expect(originalReceiptBody).toMatchObject({
       id: dueVisit.id,
       visitCode: dueVisit.visitCode,
       clinicDate: dueVisit.clinicDate,
@@ -362,10 +366,24 @@ test("MySQL API and browser preserve visit flow, authorization, and login-free d
       departmentId: xray.id,
       departmentTicketNumber: dueVisit.departmentTicketNumber,
     });
+    expect(originalReceiptBody.referenceId).toBeUndefined();
     const malformedReceipt = await reception.get(`/api/v1/reception/visits/receipt?visitCode=not-a-code&clinicDate=${dueVisit.clinicDate}`);
     expect(malformedReceipt.status()).toBe(400);
     const missingReceipt = await reception.get(`/api/v1/reception/visits/receipt?visitCode=99999&clinicDate=${dueVisit.clinicDate}`);
     expect(missingReceipt.status()).toBe(404);
+    const longCodeSearch = await mutate(reception, "/api/v1/reception/visits/receipt-search", "POST", {
+      lookupType: "visitCode",
+      lookupValue: "1000",
+      clinicDate: dueVisit.clinicDate,
+    });
+    expect(longCodeSearch.status()).toBe(200);
+    expect(await longCodeSearch.json()).toMatchObject({ matches: [], truncated: false });
+    const malformedCodeSearch = await mutate(reception, "/api/v1/reception/visits/receipt-search", "POST", {
+      lookupType: "visitCode",
+      lookupValue: "not-a-code",
+      clinicDate: dueVisit.clinicDate,
+    });
+    expect(malformedCodeSearch.status()).toBe(400);
     const ecgCall = await mutate(staff, `/api/v1/departments/${ecg.id}/call-next`, "POST", undefined, { "Idempotency-Key": randomUUID() });
     expect(ecgCall.status()).toBe(200);
     expect((await ecgCall.json()).visitCode).toBe(dueVisit.visitCode);
@@ -400,6 +418,32 @@ test("MySQL API and browser preserve visit flow, authorization, and login-free d
     expect((await mutate(staff, `/api/v1/visits/${walkInVisit.id}/complete`, "POST", {}, { "Idempotency-Key": randomUUID() })).status()).toBe(200);
     expect((await mutate(staff, `/api/v1/visits/${laterWalkInVisit.id}/complete`, "POST", {}, { "Idempotency-Key": randomUUID() })).status()).toBe(200);
     expect((await mutate(staff, `/api/v1/departments/${xray.id}/call-next`, "POST", undefined, { "Idempotency-Key": randomUUID() })).status()).toBe(409);
+
+    const duplicateReferenceVisit = await issue(ecgService.id, null, randomUUID(), sharedReference);
+    expect(duplicateReferenceVisit.response.status()).toBe(201);
+    const duplicateVisit = await duplicateReferenceVisit.response.json();
+    expect(duplicateVisit.referenceId).toBeUndefined();
+    const referenceSearch = await mutate(reception, "/api/v1/reception/visits/receipt-search", "POST", {
+      lookupType: "referenceId",
+      lookupValue: sharedReference,
+      clinicDate: dueVisit.clinicDate,
+    });
+    expect(referenceSearch.status()).toBe(200);
+    expect(referenceSearch.headers()["cache-control"]).toBe("no-store");
+    const referenceMatches = await referenceSearch.json();
+    expect(referenceMatches.truncated).toBe(false);
+    expect(referenceMatches.matches.map((match) => match.id)).toEqual(expect.arrayContaining([dueVisit.id, duplicateVisit.id]));
+    expect(JSON.stringify(referenceMatches)).not.toContain(sharedReference);
+    const selectedReceipt = await reception.get(`/api/v1/reception/visits/${dueVisit.id}/receipt`);
+    expect(selectedReceipt.status()).toBe(200);
+    expect(selectedReceipt.headers()["cache-control"]).toBe("no-store");
+    expect(await selectedReceipt.json()).toMatchObject({
+      id: dueVisit.id,
+      visitCode: dueVisit.visitCode,
+      serviceId: xrayService.id,
+      departmentId: xray.id,
+      departmentTicketNumber: dueVisit.departmentTicketNumber,
+    });
 
     await page.goto("/login");
     await page.getByLabel("Username").fill(receptionUser.userName);

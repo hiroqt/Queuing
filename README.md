@@ -10,9 +10,9 @@ A local clinic queue app with an ASP.NET Core API, a VB.NET workflow library, an
 - **Workflow:** Admin configures departments, services, physical stations, staff assignments, and monitors; Reception chooses an active service and issues a visit; assigned staff call, return a no-show to pending, then complete or forward the visit by choosing its next service.
 - **Kiosk:** Admin registers a kiosk and generates a one-time pairing code. At `/kiosk`, a paired device lets walk-ins choose a Department, then a Service, confirm, and issue an anonymous ticket through the same daily sequence as Reception. Kiosks cannot read queues or staff records.
 - **Displays:** Open `/display/pair` in a new monitor tab and enter its one-time admin-generated code. The monitor receives a revocable device-only cookie and opens `/display` without a staff username or password.
-- **Persistence:** `backend/Queuing.Api/Data/Migrations/` contains the initial schema, queue timestamp precision, Service/Station configuration, service-linked visit-step, kiosk issuer, Service-scoped Staff assignment, lobby display/video, and Department ticket sequence migrations. The one-time `--bootstrap-admin` command applies migrations and seeds the three initial departments and roles.
+- **Persistence:** `backend/Queuing.Api/Data/Migrations/` contains the initial schema, queue timestamp precision, Service/Station configuration, service-linked visit-step, kiosk issuer, Service-scoped Staff assignment, lobby display/video, Department ticket sequence, and Reference ID migrations. The one-time `--bootstrap-admin` command applies migrations and seeds the three initial departments and roles.
 
-Each Department issues its own daily ticket numbers, starting at `001`; a forwarded visit receives a number in the destination Department. The clinic-wide visit code remains stable for receipt lookup and continuity. Reception reprints by visit code plus clinic date. Kiosk issue is walk-in only and prints through an explicit browser print action. Service determines each step's Department. Staff see/call only their assigned Services within it; ordering is due appointments first, then FIFO walk-ins across those Services. The API is the queue authority. Displays show anonymous Department ticket numbers only. No patient identifiers are collected.
+Each Department issues its own daily ticket numbers, starting at `001`; a forwarded visit receives a number in the destination Department. The clinic-wide visit code remains stable for receipt lookup and continuity. Reception searches by an explicit visit-code or non-identifying-reference mode; duplicate reference matches require choosing the intended visit. References are lookup keys only and are never included in API receipt responses or printouts. Reception and kiosk print manually using the 58 mm receipt layout. Service determines each step's Department. Staff see/call only their assigned Services within it; ordering is due appointments first, then FIFO walk-ins across those Services. The API is the queue authority. Displays show anonymous Department ticket numbers only. Do not enter patient, chart, or card identifiers as references.
 
 Staff accounts are individually authenticated and Admin assigns each account to one or more Services. Staff queue reads and actions are restricted to assigned Services; unassigned Services in the same Department are excluded. The approved migration backfills existing Staff Department assignments to that Department's Services. See [SPEC-011](docs/specs/011-service-scoped-staff-access/spec.md).
 
@@ -37,6 +37,15 @@ After the bootstrap command succeeds, remove its one-time values from User Secre
 dotnet user-secrets remove --project backend/Queuing.Api "BootstrapAdmin:Password"
 dotnet user-secrets remove --project backend/Queuing.Api "BootstrapAdmin:UserName"
 ```
+
+The one-time `--bootstrap-admin` command applies migrations while creating the first administrator. Normal API startup does not change the schema. Before starting against an existing database, apply pending migrations explicitly and exit:
+
+```sh
+ASPNETCORE_ENVIRONMENT=Development ConnectionStrings__Queueing='Server=127.0.0.1;Port=3306;Database=queuing_dev;User ID=queuing_app;Password=<local-secret>;' \
+dotnet run --no-launch-profile --project backend/Queuing.Api -- --apply-migrations
+```
+
+Run this only against the intended database. The configured database account needs migration/schema permissions for this command; use a separate deployment migration identity where applicable.
 
 Run the API and frontend in separate terminals:
 
@@ -87,6 +96,7 @@ npm run test:e2e -- tests/e2e/clinic-mysql-integration.spec.js
 - `docs/specs/009-self-service-kiosk/` — department-first walk-in kiosk, independent device pairing, API scope, responsive UI direction, and acceptance criteria.
 - `docs/specs/011-service-scoped-staff-access/` — Staff Service assignments, queue authorization, existing-account backfill, and verification criteria.
 - `docs/specs/012-department-ticket-numbering/` — independent Department daily tickets and lobby muted autoplay.
+- `docs/specs/013-reception-receipt-lookup-hardening/` — explicit receipt search, duplicate-reference selection, private lookup responses, manual 58 mm printing, and explicit migration startup.
 - `docs/adr/0002-mysql-and-forwarding-visits.md` — selected MySQL provider and stable forwarded visit-code decisions.
 - `docs/CODEBASE_MAP.md`, `docs/STRUCTURE.md` — current source map and layout.
 - `skills/project-knowledge/SKILL.md` — default documentation and knowledge retention guidance.

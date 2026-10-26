@@ -21,11 +21,17 @@ export default function ReceptionPage() {
   const [appointmentAtLocal, setAppointmentAtLocal] = useState("");
   const [referenceId, setReferenceId] = useState("");
   const [visit, setVisit] = useState(null);
-  const [lookupCode, setLookupCode] = useState("");
+  const [lookupType, setLookupType] = useState("visitCode");
+  const [lookupValue, setLookupValue] = useState("");
+  const [receiptMatches, setReceiptMatches] = useState([]);
+  const [receiptSearchComplete, setReceiptSearchComplete] = useState(false);
+  const [receiptSearchTruncated, setReceiptSearchTruncated] = useState(false);
+  const [receiptSearching, setReceiptSearching] = useState(false);
   const [clinicDate, setClinicDate] = useState(clinicDateToday);
   const [loading, setLoading] = useState(true);
   const [serviceLoadFailed, setServiceLoadFailed] = useState(false);
   const [pending, setPending] = useState(false);
+  const [receiptLoading, setReceiptLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [toastKey, setToastKey] = useState(0);
@@ -33,11 +39,19 @@ export default function ReceptionPage() {
   const remainingTimeRef = useRef(TOAST_DURATION_MS);
   const startTimeRef = useRef(0);
   const timerRef = useRef(null);
-  const [autoPrint, setAutoPrint] = useState(() => (typeof window !== "undefined" ? window.localStorage?.getItem("queuing_reception_autoprint") === "true" : false));
-  const [printProfile, setPrintProfile] = useState(() => (typeof window !== "undefined" ? window.localStorage?.getItem("queuing_reception_print_profile") || "58mm" : "58mm"));
 
   const issueKey = useRef(null);
   const serviceSelectRef = useRef(null);
+  const receiptRequestId = useRef(0);
+
+  function clearReceiptSearch() {
+    receiptRequestId.current += 1;
+    setReceiptSearching(false);
+    setReceiptLoading(false);
+    setReceiptMatches([]);
+    setReceiptSearchComplete(false);
+    setReceiptSearchTruncated(false);
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -104,6 +118,7 @@ export default function ReceptionPage() {
       if (appointmentAtLocal) payload.appointmentAtLocal = appointmentAtLocal;
       if (referenceId.trim()) payload.referenceId = referenceId.trim();
       const issued = await visitsApi.issue(payload, issueKey.current);
+      clearReceiptSearch();
       setVisit(issued);
       setClinicDate(issued.clinicDate);
       setAppointmentAtLocal("");
@@ -112,9 +127,6 @@ export default function ReceptionPage() {
       setMessage(`Ticket ${issued.ticketNumber ?? issued.visitCode} issued for ${issued.departmentName}.`);
       setToastKey((prev) => prev + 1);
       remainingTimeRef.current = TOAST_DURATION_MS;
-      if (autoPrint) {
-        window.print();
-      }
     } catch (cause) {
       setError(cause.message);
     } finally {
@@ -126,10 +138,36 @@ export default function ReceptionPage() {
     event.preventDefault();
     setError("");
     setMessage("");
+    setVisit(null);
+    clearReceiptSearch();
+    const requestId = ++receiptRequestId.current;
+    setReceiptSearching(true);
+    const value = lookupValue.trim();
+    const normalizedValue = lookupType === "visitCode" && /^\d{1,2}$/.test(value) ? value.padStart(3, "0") : value;
     try {
-      setVisit(await visitsApi.receipt(lookupCode.trim(), clinicDate));
+      const result = await visitsApi.searchReceipts({ lookupType, lookupValue: normalizedValue, clinicDate });
+      if (requestId !== receiptRequestId.current) return;
+      setReceiptMatches(result.matches);
+      setReceiptSearchTruncated(result.truncated);
+      setReceiptSearchComplete(true);
     } catch (cause) {
-      setError(cause.message);
+      if (requestId === receiptRequestId.current) setError(cause.message);
+    } finally {
+      if (requestId === receiptRequestId.current) setReceiptSearching(false);
+    }
+  }
+
+  async function openReceipt(visitId) {
+    setError("");
+    const requestId = ++receiptRequestId.current;
+    setReceiptLoading(true);
+    try {
+      const receipt = await visitsApi.getReceipt(visitId);
+      if (requestId === receiptRequestId.current) setVisit(receipt);
+    } catch (cause) {
+      if (requestId === receiptRequestId.current) setError(cause.message);
+    } finally {
+      if (requestId === receiptRequestId.current) setReceiptLoading(false);
     }
   }
 
@@ -154,40 +192,10 @@ export default function ReceptionPage() {
           <h1 id="reception-heading">Issue a visit</h1>
           <p>Choose a service to issue that department’s ticket number and a clinic visit code for lookup.</p>
         </div>
-        <aside className="reception-desk-settings" aria-label="Ticket numbering and station settings">
-          <div className="reception-setting-badge">
-            <span>Ticket numbering:</span>
-            <strong>Per department · Resets daily</strong>
-          </div>
-          <div className="reception-settings-row" aria-label="Desk printer options">
-            <label className="reception-option-toggle">
-              <input
-                type="checkbox"
-                checked={autoPrint}
-                onChange={(event) => {
-                  const checked = event.target.checked;
-                  setAutoPrint(checked);
-                  window.localStorage?.setItem("queuing_reception_autoprint", checked ? "true" : "false");
-                }}
-              />
-              <span>Auto-print</span>
-            </label>
-            <span className="reception-settings-divider" aria-hidden="true">|</span>
-            <label className="reception-option-select">
-              <span>Paper:</span>
-              <select
-                value={printProfile}
-                onChange={(event) => {
-                  const val = event.target.value;
-                  setPrintProfile(val);
-                  window.localStorage?.setItem("queuing_reception_print_profile", val);
-                }}
-              >
-                <option value="58mm">58 mm</option>
-                <option value="80mm">80 mm</option>
-              </select>
-            </label>
-          </div>
+        <aside className="reception-numbering" aria-label="Ticket numbering">
+          <span className="eyebrow">TICKET NUMBERING</span>
+          <strong>Per department · Resets daily</strong>
+          <span>The visit code stays the same when forwarded.</span>
         </aside>
       </div>
 
@@ -275,7 +283,7 @@ export default function ReceptionPage() {
             </div>
 
             <div className="reception-field">
-              <label htmlFor="reference-id">Chart # / Reference ID <span className="optional-label">Optional</span></label>
+              <label htmlFor="reference-id">Non-identifying reference <span className="optional-label">Optional</span></label>
               <input
                 id="reference-id"
                 type="text"
@@ -283,10 +291,10 @@ export default function ReceptionPage() {
                 onChange={(event) => { setReferenceId(event.target.value); issueKey.current = null; }}
                 disabled={pending}
                 maxLength={50}
-                placeholder="e.g. CH-1042"
+                placeholder="e.g. REF-A7"
                 aria-describedby="reference-hint"
               />
-              <p className="field-hint" id="reference-hint">Optional clinic chart or card number for easy lookup if ticket is lost.</p>
+              <p className="field-hint" id="reference-hint">Use a local code only. Do not enter a chart, patient, or card number.</p>
             </div>
 
             <button className="button button-dark reception-issue-button" type="submit" disabled={loading || pending || services.length === 0}>
@@ -324,7 +332,7 @@ export default function ReceptionPage() {
             </div>
 
             {visit ? (
-              <article className={`dashboard-receipt ticket-receipt ${printProfile === "80mm" ? "print-80mm" : "print-58mm"}`} aria-labelledby="receipt-title">
+              <article className="dashboard-receipt ticket-receipt print-58mm" aria-labelledby="receipt-title">
                 {visit.isReprint && (
                   <div className="receipt-reprint-banner" role="status" aria-label="Reprinted ticket">
                     *** REPRINT ***
@@ -340,9 +348,8 @@ export default function ReceptionPage() {
                 <p className="receipt-number">{visit.ticketNumber ?? visit.visitCode}</p>
                 <p className="receipt-service">{visit.serviceName} · {visit.departmentName}</p>
                 <p className="receipt-reference">Visit code: {visit.visitCode}</p>
-                {visit.referenceId && <p className="receipt-meta receipt-chart-ref">Chart / Ref: {visit.referenceId}</p>}
                 <p className="receipt-time">Appointment: {clinicTime(visit.appointmentAtUtc)}</p>
-                <p className="receipt-note">Listen for your department ticket number. Use the visit code or Chart # for lookup.</p>
+                <p className="receipt-note">Listen for your department ticket number. Use the visit code or non-identifying reference for lookup.</p>
               </article>
             ) : (
               <div className="reception-ticket-empty">
@@ -360,18 +367,59 @@ export default function ReceptionPage() {
                 <h2 id="lookup-heading">Find lost ticket</h2>
               </div>
             </div>
-            <p className="panel-description">Search by visit code or Chart # / Reference ID to reprint a lost receipt.</p>
+            <p className="panel-description">Search by visit code or a non-identifying local reference.</p>
             <form className="lookup-form" onSubmit={lookup}>
               <div className="reception-field">
-                <label htmlFor="visit-lookup">Visit code or Chart #</label>
-                <input id="visit-lookup" value={lookupCode} onChange={(event) => setLookupCode(event.target.value)} required autoComplete="off" placeholder="e.g. 001 or CH-1042" />
+                <label htmlFor="receipt-lookup-type">Search by</label>
+                <select id="receipt-lookup-type" value={lookupType} onChange={(event) => {
+                  clearReceiptSearch();
+                  setLookupType(event.target.value);
+                  setLookupValue("");
+                }} disabled={receiptLoading}>
+                  <option value="visitCode">Visit code</option>
+                  <option value="referenceId">Non-identifying reference</option>
+                </select>
+              </div>
+              <div className="reception-field">
+                <label htmlFor="receipt-lookup-value">{lookupType === "visitCode" ? "Visit code" : "Non-identifying reference"}</label>
+                <input
+                  id="receipt-lookup-value"
+                  value={lookupValue}
+                  onChange={(event) => { clearReceiptSearch(); setLookupValue(event.target.value); }}
+                  required
+                  autoComplete="off"
+                  inputMode={lookupType === "visitCode" ? "numeric" : "text"}
+                  maxLength={lookupType === "visitCode" ? 12 : 50}
+                  placeholder={lookupType === "visitCode" ? "e.g. 001 or 1000" : "e.g. REF-A7"}
+                  disabled={receiptLoading}
+                />
               </div>
               <div className="reception-field">
                 <label htmlFor="clinic-date-lookup">Clinic date</label>
-                <input id="clinic-date-lookup" type="date" value={clinicDate} onChange={(event) => setClinicDate(event.target.value)} required />
+                <input id="clinic-date-lookup" type="date" value={clinicDate} onChange={(event) => { clearReceiptSearch(); setClinicDate(event.target.value); }} required disabled={receiptLoading} />
               </div>
-              <button className="button button-quiet reception-find-button" type="submit">Find visit</button>
+              <button className="button button-quiet reception-find-button" type="submit" disabled={receiptLoading || receiptSearching}>{receiptSearching ? "Searching…" : "Find visit"}</button>
             </form>
+            {receiptSearchComplete && receiptMatches.length === 0 && <p className="field-hint" role="status">No visits matched that value and clinic date.</p>}
+            {receiptMatches.length > 0 && (
+              <div className="receipt-match-list" aria-label="Matching visits">
+                <p className="field-hint" role="status">{receiptMatches.length === 1 ? "1 visit found. Select it to load the receipt." : `${receiptMatches.length} visits found. Select the correct visit.`}</p>
+                {receiptSearchTruncated && <p className="field-hint" role="status">Showing the 100 most recent matches. Narrow the search if you do not see the visit.</p>}
+                {receiptMatches.map((match) => (
+                  <button
+                    className="receipt-match"
+                    type="button"
+                    key={match.id}
+                    disabled={receiptLoading}
+                    onClick={() => openReceipt(match.id)}
+                  >
+                    <strong>{match.ticketNumber} · {match.departmentName}</strong>
+                    <span>{match.serviceName || "Previous service"} · Visit {match.visitCode}</span>
+                    <span>Issued {clinicTime(match.issuedAtUtc)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </section>
         </div>
       </div>

@@ -144,16 +144,16 @@ export const visitsApi = {
     body: JSON.stringify(visit),
   }),
   get: (id, signal) => api(`/visits/${encodeURIComponent(id)}`, { signal }),
-  receipt: (lookup, clinicDate, signal) => {
-    const trimmed = typeof lookup === "string" ? lookup.trim() : "";
-    const params = typeof lookup === "object" && lookup !== null
-      ? { ...lookup, clinicDate }
-      : /^\d{1,3}$/.test(trimmed)
-        ? { visitCode: trimmed.padStart(3, "0"), clinicDate }
-        : { referenceId: trimmed, clinicDate };
-    const query = new URLSearchParams(params);
+  receipt: (visitCode, clinicDate, signal) => {
+    const query = new URLSearchParams({ visitCode: visitCode.trim(), clinicDate });
     return api(`/reception/visits/receipt?${query}`, { signal });
   },
+  searchReceipts: (criteria, signal) => api("/reception/visits/receipt-search", {
+    method: "POST",
+    body: JSON.stringify(criteria),
+    signal,
+  }),
+  getReceipt: (visitId, signal) => api(`/reception/visits/${encodeURIComponent(visitId)}/receipt`, { signal }),
 };
 
 export const queueApi = {
