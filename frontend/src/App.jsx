@@ -9,6 +9,7 @@ import UsersSection from "./features/admin/sections/UsersSection.jsx";
 import StationsSection from "./features/admin/sections/StationsSection.jsx";
 import DisplaysSection from "./features/admin/sections/DisplaysSection.jsx";
 import KiosksSection from "./features/admin/sections/KiosksSection.jsx";
+import AdminDashboardSection from "./features/admin/sections/AdminDashboardSection.jsx";
 import DepartmentQueuePage from "./features/department/DepartmentQueuePage.jsx";
 import ReceptionPage from "./features/reception/ReceptionPage.jsx";
 import DisplayPairPage from "./features/display/DisplayPairPage.jsx";
@@ -24,6 +25,7 @@ import { homeForRole } from "./auth/roles.js";
 import { RequireRole, RequireSession } from "./auth/RouteGuards.jsx";
 
 const adminSectionRoutes = {
+  dashboard: <AdminDashboardSection />,
   departments: <DepartmentsSection />,
   services: <ServicesSection />,
   users: <UsersSection />,
@@ -80,7 +82,7 @@ function WorkspaceRoutes() {
             <Route index element={<RoleHome />} />
             <Route element={<RequireRole roles={["admin"]} />}>
               <Route path="admin" element={<AdminLayout />}>
-                <Route index element={<Navigate to="departments" replace />} />
+                <Route index element={<Navigate to="dashboard" replace />} />
                 {adminSections.map(({ path }) => <Route key={path} path={path} element={adminSectionRoutes[path]} />)}
               </Route>
             </Route>
