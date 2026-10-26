@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { departmentApi } from "../../../api/client.js";
+import AdminActions from "../components/AdminActions.jsx";
+import AdminDialog from "../components/AdminDialog.jsx";
 import AdminFeedback from "../components/AdminFeedback.jsx";
+import AdminListControls from "../components/AdminListControls.jsx";
 import AdminSectionHeader from "../components/AdminSectionHeader.jsx";
+import AdminStatusBadge from "../components/AdminStatusBadge.jsx";
 
 export default function DepartmentsSection() {
   const [departments, setDepartments] = useState([]);
@@ -64,28 +68,32 @@ export default function DepartmentsSection() {
         eyebrow="QUEUE DESTINATIONS"
         title="Departments"
         countLabel={`${departments.length} configured`}
-        action={<button className="button button-dark" type="button" onClick={() => setShowCreate((value) => !value)}>{showCreate ? "Cancel" : "Add department"}</button>}
+        action={<button className="button button-dark" type="button" onClick={() => setShowCreate(true)} disabled={loading}>Add department</button>}
       />
-      <AdminFeedback error={error} message={message} />
+      <AdminFeedback error={showCreate ? "" : error} message={message} />
       {loading && <p role="status" className="panel-description">Loading departments…</p>}
       {!loading && !error && departments.length === 0 && <p className="panel-description">No departments are configured yet. Add a department to define where clinic services are handled.</p>}
-      {showCreate && <form className="admin-inline-form" onSubmit={createDepartment}>
-        <h3>Add department</h3>
-        <label htmlFor="new-department">Department name</label>
-        <input id="new-department" name="name" required minLength="2" maxLength="100" />
-        {error && <p className="action-message" role="alert">{error}</p>}
-        <button className="button button-dark" type="submit" disabled={submitting}>{submitting ? "Saving department…" : "Save department"}</button>
-      </form>}
-      {departments.length > 0 && <ul className="settings-list admin-department-list">{departments.map((department) => (
-        <li key={department.id}>
-          <span>{department.name}</span>
-          <span className="enabled-label">{department.active ? "Active" : "Inactive"}</span>
-          <button className="text-button" type="button" onClick={() => {
-            const active = !department.active;
-            return act(() => departmentApi.update(department.id, { active }), `${department.name} ${active ? "reactivated" : "deactivated"}.`);
-          }}>{department.active ? "Deactivate" : "Reactivate"}</button>
-        </li>
-      ))}</ul>}
+      {showCreate && <AdminDialog title="Add department" onClose={() => setShowCreate(false)} busy={submitting}>
+        <form onSubmit={createDepartment}>
+          <label htmlFor="new-department">Department name</label>
+          <input id="new-department" name="name" required minLength="2" maxLength="100" autoFocus />
+          {error && <p className="action-message" role="alert">{error}</p>}
+          <div className="admin-form-actions"><button className="button button-dark" type="submit" disabled={submitting}>{submitting ? "Saving department…" : "Save department"}</button><button className="button button-quiet" type="button" onClick={() => setShowCreate(false)} disabled={submitting}>Cancel</button></div>
+        </form>
+      </AdminDialog>}
+      {departments.length > 0 && <AdminListControls items={departments} searchLabel="departments" searchPlaceholder="Department name" alwaysShowSearch getSearchText={(item) => item.name} getStatus={(item) => item.active ? "active" : "inactive"}>
+        {(filteredDepartments) => <ul className="settings-list admin-department-list">{filteredDepartments.map((department) => (
+          <li className="admin-record" key={department.id}>
+            <div className="admin-record-summary"><strong>{department.name}</strong><AdminStatusBadge status={department.active ? "active" : "inactive"} /></div>
+            <AdminActions>
+              <button className="text-button" type="button" disabled={submitting} onClick={() => {
+                const active = !department.active;
+                return act(() => departmentApi.update(department.id, { active }), `${department.name} ${active ? "reactivated" : "deactivated"}.`);
+              }}>{department.active ? "Deactivate" : "Reactivate"}</button>
+            </AdminActions>
+          </li>
+        ))}</ul>}
+      </AdminListControls>}
     </section>
   );
 }

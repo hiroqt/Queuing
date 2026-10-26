@@ -16,7 +16,7 @@ namespace Queuing.Api.Controllers;
 [ApiController]
 [Route("api/v1/admin/displays")]
 [Authorize(Policy = QueueRoles.Admin)]
-public sealed class AdminDisplaysController(QueueDbContext db, TimeProvider clock, IHubContext<QueueHub> hub) : ControllerBase
+public sealed class AdminDisplaysController(QueueDbContext db, TimeProvider clock, IHubContext<QueueHub> hub, ILogger<AdminDisplaysController> logger) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken cancellationToken) =>
@@ -108,6 +108,33 @@ public sealed class AdminDisplaysController(QueueDbContext db, TimeProvider cloc
             await hub.Clients.Group(QueueHub.DisplayGroupName(display.Id, previousCredentialHash)).SendAsync("DisplayRevoked", cancellationToken);
         }
         return Ok(new { code });
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+    {
+        var display = await db.DisplayDevices.SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
+        if (display is null) return NotFound();
+
+        var credentialHash = display.CredentialHash;
+        db.DisplayDevices.Remove(display);
+        AddAudit("display.deleted", display.Id);
+        await db.SaveChangesAsync(cancellationToken);
+
+        if (credentialHash is not null)
+        {
+            try
+            {
+                await hub.Clients.Group(QueueHub.DisplayGroupName(display.Id, credentialHash))
+                    .SendAsync("DisplayRevoked", cancellationToken);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                logger.LogWarning(exception, "Deleted display {DisplayId} could not receive its revocation notice.", display.Id);
+            }
+        }
+
+        return NoContent();
     }
 
     private void AddAudit(string action, Guid id) => db.AuditRecords.Add(new AuditRecord
