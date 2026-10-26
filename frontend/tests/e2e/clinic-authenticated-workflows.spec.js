@@ -47,6 +47,30 @@ async function mockApi(page, initialRole = null, forcePasswordChange = false, op
       return json(availableServices);
     }
     if (path === "/admin/departments" && method === "GET") return json(departments);
+    if (path === "/admin/dashboard" && method === "GET") {
+      if (options.dashboardDelayMs) await new Promise((resolve) => setTimeout(resolve, options.dashboardDelayMs));
+      const dashboard = {
+        updatedAtUtc: "2026-10-27T00:00:00Z",
+        displays: { total: displays.length, active: displays.filter((item) => item.active).length, inactive: displays.filter((item) => !item.active).length },
+        queue: {
+          waitingCount: waiting.length,
+          calledCount: called.length,
+          departments: departments.map((item, index) => ({ departmentId: item.id, departmentName: item.name, waitingCount: index === 0 ? waiting.length : 0, calledCount: index === 0 ? called.length : 0 })),
+        },
+      };
+      if (url.searchParams.get("includeConfiguration") !== "false") {
+        Object.assign(dashboard, {
+          configurationUpdatedAtUtc: "2026-10-27T00:00:00Z",
+          departments: { total: departments.length, active: departments.filter((item) => item.active).length, inactive: departments.filter((item) => !item.active).length },
+          services: { total: services.length, active: services.filter((item) => item.active).length, inactive: services.filter((item) => !item.active).length },
+          stations: { total: stations.length, active: stations.filter((item) => item.active).length, inactive: stations.filter((item) => !item.active).length },
+          users: { total: users.length, active: users.filter((item) => item.active).length, inactive: users.filter((item) => !item.active).length },
+          kiosks: { total: 0, active: 0, inactive: 0 },
+          setupChecks: { departmentsWithoutActiveServices: 0, stationsWithoutActiveStaff: 0 },
+        });
+      }
+      return json(dashboard);
+    }
     if (path === "/admin/departments" && method === "POST") {
       const created = { id: "dept-new", name: body.name, active: true };
       departments.push(created);
@@ -224,25 +248,30 @@ test("admin can configure each section through the sidebar and sees only the sel
   const behavior = { deleteUserError: true };
   const { requests } = await mockApi(page, "Admin", false, behavior);
   await page.goto("/admin");
+  await expect(page).toHaveURL(/\/admin\/dashboard$/);
+  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your clinic" })).toBeVisible();
+  const adminSections = page.getByRole("group", { name: "Admin sections" });
+  await expect(adminSections.getByRole("region", { name: "Overview" })).toBeVisible();
+  await adminSections.getByRole("link", { name: /^Departments/ }).click();
   await expect(page).toHaveURL(/\/admin\/departments$/);
-  await expect(page.getByRole("heading", { name: "Clinic configuration" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Departments" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Services" })).toHaveCount(0);
-  const adminMenu = page.getByRole("button", { name: /Administration/ });
-  await expect(adminMenu).toHaveAttribute("aria-expanded", "true");
-  await adminMenu.click();
-  await expect(adminMenu).toHaveAttribute("aria-expanded", "false");
-  await adminMenu.click();
+  await expect(adminSections.getByRole("region", { name: "Clinic setup" })).toBeVisible();
+  await expect(adminSections.getByRole("region", { name: "Access" })).toBeVisible();
+  await expect(adminSections.getByRole("region", { name: "Devices" })).toBeVisible();
   await page.getByRole("button", { name: "Add department" }).click();
   await page.getByLabel("Department name").fill("Ultrasound");
-  await page.getByRole("button", { name: "Save department" }).click();
+  await page.getByRole("dialog", { name: "Add department" }).getByRole("button", { name: "Save department" }).click();
   await expect(page.getByRole("region", { name: "Departments" }).getByText("Ultrasound", { exact: true })).toBeVisible();
 
   const ecgDepartment = page.locator(".admin-department-list li").filter({ hasText: "ECG" });
+  await ecgDepartment.getByText("Actions").click();
   await ecgDepartment.getByRole("button", { name: "Deactivate" }).click();
-  await expect(ecgDepartment.locator(".enabled-label")).toHaveText("Inactive");
+  await expect(ecgDepartment.locator(".admin-status-badge")).toHaveText("Inactive");
+  await ecgDepartment.getByText("Actions").click();
   await ecgDepartment.getByRole("button", { name: "Reactivate" }).click();
-  await expect(ecgDepartment.locator(".enabled-label")).toHaveText("Active");
+  await expect(ecgDepartment.locator(".admin-status-badge")).toHaveText("Active");
   await expect(page.getByText("ECG reactivated.")).toBeVisible();
   expect(requests.filter((entry) => entry.path === "/admin/departments/dept-ecg" && entry.method === "PATCH").at(-1).body).toEqual({ active: true });
 
@@ -250,20 +279,29 @@ test("admin can configure each section through the sidebar and sees only the sel
   await expect(page).toHaveURL(/\/admin\/services$/);
   await expect(page.getByRole("region", { name: "Departments" })).toHaveCount(0);
   await page.getByRole("button", { name: "Add service" }).click();
-  await page.getByLabel("Service name").fill("X-ray Imaging");
-  await page.getByLabel("Service department").selectOption("dept-xray");
-  await page.getByRole("button", { name: "Save service" }).click();
+  const addServiceDialog = page.getByRole("dialog", { name: "Add service" });
+  await addServiceDialog.getByLabel("Service name").fill("X-ray Imaging");
+  await addServiceDialog.getByLabel("Department").selectOption("dept-xray");
+  await addServiceDialog.getByRole("button", { name: "Save service" }).click();
   await expect(page.getByRole("region", { name: "Services" }).getByText("X-ray Imaging", { exact: true })).toBeVisible();
 
   await page.getByRole("link", { name: "Users & access" }).click();
   await expect(page).toHaveURL(/\/admin\/users$/);
   await expect(page.getByRole("region", { name: "Services" })).toHaveCount(0);
   await page.getByRole("button", { name: "Add user" }).click();
-  await page.getByLabel("Username", { exact: true }).fill("new-staff");
-  await page.getByLabel("Role", { exact: true }).last().selectOption("Staff");
-  await page.getByLabel("Services for staff").selectOption(["service-new"]);
-  await page.getByRole("button", { name: "Provision user" }).click();
-  await expect(page.getByText("one-time-secret")).toBeVisible();
+  const addUserDialog = page.getByRole("dialog", { name: "Add user" });
+  await addUserDialog.getByLabel("Username", { exact: true }).fill("new-staff");
+  await addUserDialog.getByLabel("Role", { exact: true }).selectOption("Staff");
+  await addUserDialog.getByRole("checkbox", { name: "X-ray · X-ray Imaging" }).check();
+  await addUserDialog.getByRole("button", { name: "Provision user" }).click();
+  const credentialDialog = page.getByRole("dialog", { name: "Temporary password generated" });
+  await expect(credentialDialog).toContainText("Username: new-staff");
+  const temporaryPassword = credentialDialog.getByRole("textbox", { name: "Temporary password" });
+  await expect(temporaryPassword).toHaveValue("one-time-secret");
+  await credentialDialog.getByRole("button", { name: "Hide temporary password" }).click();
+  await expect(temporaryPassword).toHaveAttribute("type", "password");
+  await credentialDialog.getByRole("button", { name: "Show temporary password" }).click();
+  await credentialDialog.getByRole("button", { name: "Close" }).click();
   await expect(page.getByLabel("Password")).toHaveCount(0);
   expect(requests.find((entry) => entry.path === "/admin/users" && entry.method === "POST").body)
     .toMatchObject({ role: "Staff", serviceIds: ["service-new"] });
@@ -271,31 +309,34 @@ test("admin can configure each section through the sidebar and sees only the sel
   await page.getByRole("link", { name: "Stations" }).click();
   await expect(page).toHaveURL(/\/admin\/stations$/);
   await page.getByRole("button", { name: "Add station" }).click();
-  await page.getByLabel("Station name").fill("Window 1");
-  await page.getByLabel("Station department").selectOption("dept-xray");
-  await page.getByLabel("Services handled").selectOption("service-new");
-  await page.getByLabel("Assigned staff").selectOption("user-new");
-  await page.getByRole("button", { name: "Save station" }).click();
+  const addStationDialog = page.getByRole("dialog", { name: "Add station" });
+  await addStationDialog.getByLabel("Station name").fill("Window 1");
+  await addStationDialog.getByLabel("Department").selectOption("dept-xray");
+  await addStationDialog.getByRole("checkbox", { name: "X-ray Imaging" }).check();
+  await addStationDialog.getByRole("checkbox", { name: "new-staff" }).check();
+  await addStationDialog.getByRole("button", { name: "Save station" }).click();
   const stationRegion = page.getByRole("region", { name: "Stations" });
   await expect(stationRegion.getByText("Window 1", { exact: true })).toBeVisible();
-  await expect(stationRegion.locator(".admin-record-summary")).toContainText("X-ray Imaging");
-  await expect(stationRegion.getByText("new-staff", { exact: true })).toBeVisible();
-  const savedStationForm = stationRegion.locator(".admin-record form");
-  await stationRegion.getByRole("button", { name: "Edit station" }).click();
-  await savedStationForm.getByLabel("Station name").fill("Window 1 Front Desk");
-  await savedStationForm.getByRole("button", { name: "Save station" }).click();
+  await expect(stationRegion.locator(".admin-record-details")).toContainText("X-ray Imaging");
+  await expect(stationRegion.locator(".admin-record-details")).toContainText("new-staff");
+  const savedStationRecord = stationRegion.locator(".admin-record").filter({ hasText: "Window 1" });
+  await savedStationRecord.getByText("Actions").click();
+  await savedStationRecord.getByRole("button", { name: "Edit station" }).click();
+  const editStationDialog = page.getByRole("dialog", { name: "Edit station" });
+  await editStationDialog.getByLabel("Station name").fill("Window 1 Front Desk");
+  await editStationDialog.getByRole("button", { name: "Save station" }).click();
   await expect(stationRegion.getByText("Window 1 Front Desk", { exact: true })).toBeVisible();
 
   await page.getByRole("link", { name: "Users & access" }).click();
   const savedUserRecord = page.getByRole("region", { name: "Users & access" }).locator(".admin-record").filter({ hasText: "new-staff" });
-  await savedUserRecord.getByRole("button", { name: "Edit access" }).click();
-  const savedUserForm = savedUserRecord.locator("form");
-  await savedUserForm.getByLabel("Active").uncheck();
-  await savedUserForm.getByRole("button", { name: "Save user access" }).click();
-  await expect(page.getByText("one-time-secret")).toBeVisible();
+  await expect(savedUserRecord.locator(".admin-record-details")).toContainText("X-ray · X-ray Imaging");
+  await savedUserRecord.getByText("Actions").click();
+  await savedUserRecord.getByRole("button", { name: "Deactivate" }).click();
+  await expect(savedUserRecord.locator(".admin-status-badge")).toHaveText("Inactive");
 
+  await savedUserRecord.getByText("Actions").click();
   await savedUserRecord.getByRole("button", { name: "Edit access" }).click();
-  const roleChangeForm = savedUserRecord.locator("form");
+  const roleChangeForm = page.getByRole("dialog", { name: "Edit user access" });
   await roleChangeForm.getByLabel("Role").selectOption("Reception");
   await roleChangeForm.getByRole("button", { name: "Save user access" }).click();
   const roleChangeRequest = requests.filter((entry) => entry.path === "/admin/users/user-new" && entry.method === "PATCH").at(-1);
@@ -303,14 +344,16 @@ test("admin can configure each section through the sidebar and sees only the sel
 
   await page.getByRole("link", { name: "Stations" }).click();
   const refreshedStationRegion = page.getByRole("region", { name: "Stations" });
-  await expect(refreshedStationRegion.getByText("No staff assigned")).toBeVisible();
+  await expect(refreshedStationRegion).toContainText("Staff: None assigned");
   await page.getByRole("link", { name: "Users & access" }).click();
   const deleteRecord = page.getByRole("region", { name: "Users & access" }).locator(".admin-record").filter({ hasText: "new-staff" });
+  await deleteRecord.getByText("Actions").click();
   await deleteRecord.getByRole("button", { name: "Delete user" }).click();
   await expect(page.getByRole("alertdialog")).toContainText("permanently removes this account");
   await expect(page.getByRole("alertdialog").getByRole("button", { name: "Cancel" })).toHaveCSS("color", "rgb(32, 50, 49)");
   await page.getByRole("alertdialog").getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await deleteRecord.getByText("Actions").click();
   await deleteRecord.getByRole("button", { name: "Delete user" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Delete user" }).click();
   await expect(page.getByRole("alertdialog")).toContainText("Deactivate it to keep those records.");
@@ -324,15 +367,21 @@ test("admin can configure each section through the sidebar and sees only the sel
   await page.getByRole("link", { name: "Displays" }).click();
   await expect(page).toHaveURL(/\/admin\/displays$/);
   await page.getByRole("button", { name: "Add display" }).click();
-  await page.getByLabel("Display name").fill("X-ray Waiting Room");
-  await page.getByLabel("Assigned department", { exact: true }).selectOption("dept-xray");
-  await page.getByRole("button", { name: "Save display" }).click();
+  const addDisplayDialog = page.getByRole("dialog", { name: "Register display" });
+  await addDisplayDialog.getByLabel("Display name").fill("X-ray Waiting Room");
+  await addDisplayDialog.getByLabel("Assigned department", { exact: true }).selectOption("dept-xray");
+  await addDisplayDialog.getByRole("button", { name: "Save display" }).click();
   await expect(page.getByText("X-ray Waiting Room", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Create pairing code" }).click();
-  await expect(page.getByText("PAIR-1234")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Open pairing page in a new tab" })).toHaveAttribute("target", "_blank");
-  await expect(page.getByRole("link", { name: "Open pairing page in a new tab" })).toHaveAttribute("href", "/display/pair");
-  await page.getByRole("button", { name: "Revoke" }).click();
+  const displayRecord = page.locator(".admin-record").filter({ hasText: "X-ray Waiting Room" });
+  await displayRecord.getByText("Actions").click();
+  await displayRecord.getByRole("button", { name: "Create pairing code" }).click();
+  const pairingDialog = page.getByRole("dialog", { name: "Monitor pairing code" });
+  await expect(pairingDialog.getByLabel("One-time pairing code")).toHaveValue("PAIR-1234");
+  await expect(pairingDialog.getByRole("link", { name: "Open monitor pairing page in a new tab" })).toHaveAttribute("target", "_blank");
+  await expect(pairingDialog.getByRole("link", { name: "Open monitor pairing page in a new tab" })).toHaveAttribute("href", "/display/pair");
+  await pairingDialog.getByRole("button", { name: "Close" }).click();
+  await displayRecord.getByText("Actions").click();
+  await displayRecord.getByRole("button", { name: "Revoke display" }).click();
   await expect(page.getByText("Revoked", { exact: true })).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(/\/admin\/stations$/);
@@ -342,6 +391,37 @@ test("admin can configure each section through the sidebar and sees only the sel
   await expect(page).toHaveURL(/\/admin\/services$/);
   await expect(page.getByRole("region", { name: "Services" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Stations" })).toHaveCount(0);
+});
+
+test("dashboard initial load recovers from StrictMode's aborted first request", async ({ page }) => {
+  const { requests } = await mockApi(page, "Admin", false, { dashboardDelayMs: 500 });
+  const startedAt = Date.now();
+  await page.goto("/admin");
+  await expect(page.getByRole("heading", { name: "Your clinic" })).toBeVisible();
+  await expect.poll(() => requests.filter((entry) => entry.path === "/admin/dashboard").length).toBeGreaterThan(0);
+  await page.waitForTimeout(750);
+  expect(
+    requests.filter((entry) => entry.path === "/admin/dashboard").length,
+    "StrictMode remount should start a replacement dashboard request after aborting the first",
+  ).toBeGreaterThan(1);
+  await expect(page.getByRole("status")).toHaveCount(0, { timeout: 5_000 });
+  expect(Date.now() - startedAt).toBeLessThan(5_000);
+  expect(requests.filter((entry) => entry.path === "/admin/dashboard").length).toBeGreaterThan(0);
+  await expect.poll(() => requests.some((entry) => entry.path === "/admin/dashboard" && entry.query.includes("includeConfiguration=false")), { timeout: 20_000 }).toBe(true);
+  await expect(page.getByRole("button", { name: "Refresh overview" })).toBeEnabled();
+  await page.getByRole("button", { name: "Refresh overview" }).click();
+  await expect.poll(() => requests.some((entry) => entry.path === "/admin/dashboard" && entry.query.includes("refreshConfiguration=true"))).toBe(true);
+});
+
+test("dashboard replaces an endless initial loader with a timeout and retry action", async ({ page }) => {
+  const { requests } = await mockApi(page, "Admin", false, { dashboardDelayMs: 15_000 });
+  await page.goto("/admin");
+  await expect(page.getByRole("heading", { name: "Your clinic" })).toBeVisible();
+  await expect.poll(() => requests.filter((entry) => entry.path === "/admin/dashboard").length).toBeGreaterThan(1);
+
+  await expect(page.getByRole("alert")).toContainText("took too long to load", { timeout: 12_000 });
+  await expect(page.getByRole("status")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
 });
 
 test("reception issues a service-linked appointment and manually reprints by explicit visit-code search", async ({ page }) => {
@@ -485,24 +565,33 @@ test("admin registers a lobby display and manages URL and uploaded playlist vide
   const { requests } = await mockApi(page, "Admin");
   await page.goto("/admin/displays");
   await page.getByRole("button", { name: "Add display" }).click();
-  await page.getByLabel("Display name").fill("Main Lobby");
-  await page.getByLabel("Display type").selectOption("Lobby");
-  await page.getByRole("button", { name: "Save display" }).click();
+  const createDialog = page.getByRole("dialog", { name: "Register display" });
+  await createDialog.getByLabel("Display name").fill("Main Lobby");
+  await createDialog.getByLabel("Display type").selectOption("Lobby");
+  await createDialog.getByRole("button", { name: "Save display" }).click();
   await expect(page.getByText("Main Lobby", { exact: true })).toBeVisible();
-  await expect(page.locator(".admin-record-summary").filter({ hasText: "Main Lobby" })).toContainText("All active departments");
+  await expect(page.locator(".admin-record").filter({ hasText: "Main Lobby" })).toContainText("All active departments");
 
-  await page.getByLabel("Direct HTTPS video URL (.mp4 or .webm)").fill("https://media.example.org/welcome.mp4");
-  await page.getByRole("button", { name: "Add video URL" }).click();
+  await page.getByRole("button", { name: /Lobby video playlist/ }).click();
+  await page.getByRole("button", { name: "Add video" }).click();
+  const urlDialog = page.getByRole("dialog", { name: "Add lobby video" });
+  await urlDialog.getByLabel("Direct HTTPS video URL (.mp4 or .webm)").fill("https://media.example.org/welcome.mp4");
+  await urlDialog.getByRole("button", { name: "Add video", exact: true }).click();
   await expect(page.getByText("welcome.mp4", { exact: true })).toBeVisible();
-  await page.getByLabel("Upload a video (MP4 or WebM, up to 250 MiB)").setInputFiles({
+  await page.getByRole("button", { name: "Add video" }).click();
+  const uploadDialog = page.getByRole("dialog", { name: "Add lobby video" });
+  await uploadDialog.getByLabel("Video source").selectOption("upload");
+  await uploadDialog.getByLabel("Video file (MP4 or WebM, up to 250 MiB)").setInputFiles({
     name: "clinic-info.webm",
     mimeType: "video/webm",
     buffer: Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x93]),
   });
-  await page.getByRole("button", { name: "Upload video" }).click();
+  await uploadDialog.getByRole("button", { name: "Upload video" }).click();
   await expect(page.getByText("clinic-info.webm", { exact: true })).toBeVisible();
   expect(requests.find((entry) => entry.path === "/admin/display-videos/upload").headers["content-type"]).toContain("multipart/form-data; boundary=");
-  await page.locator(".admin-video-list li").filter({ hasText: "clinic-info.webm" }).getByRole("button", { name: "Remove" }).click();
+  const videoRow = page.locator(".admin-video-list li").filter({ hasText: "clinic-info.webm" });
+  await videoRow.getByText("Actions").click();
+  await videoRow.getByRole("button", { name: "Remove video" }).click();
   await expect(page.getByText("clinic-info.webm", { exact: true })).toHaveCount(0);
 });
 

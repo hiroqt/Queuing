@@ -11,14 +11,26 @@ test("local setup opens the Admin workspace without requesting a login", async (
     apiRequests.push(url.pathname);
     if (url.pathname === "/api/v1/auth/session") return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(identity) });
     if (url.pathname === "/api/v1/auth/logout") { identity = { authenticated: false }; return route.fulfill({ status: 204 }); }
-    const payload = url.pathname === "/api/v1/auth/csrf" ? { requestToken: "local-setup-test-token" } : [];
+    const payload = url.pathname === "/api/v1/auth/csrf"
+      ? { requestToken: "local-setup-test-token" }
+      : url.pathname === "/api/v1/admin/dashboard"
+        ? {
+          updatedAtUtc: "2026-10-27T00:00:00Z",
+          configurationUpdatedAtUtc: "2026-10-27T00:00:00Z",
+          departments: { total: 0, active: 0, inactive: 0 }, services: { total: 0, active: 0, inactive: 0 },
+          stations: { total: 0, active: 0, inactive: 0 }, users: { total: 0, active: 0, inactive: 0 },
+          displays: { total: 0, active: 0, inactive: 0 }, kiosks: { total: 0, active: 0, inactive: 0 },
+          setupChecks: { departmentsWithoutActiveServices: 0, stationsWithoutActiveStaff: 0 },
+          queue: { waitingCount: 0, calledCount: 0, departments: [] },
+        }
+        : [];
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(payload) });
   });
 
   await page.goto("/");
 
-  await expect(page).toHaveURL(/\/admin\/departments$/);
-  await expect(page.getByRole("heading", { name: "Clinic configuration" })).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/dashboard$/);
+  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
   await expect(page.getByRole("status").filter({ hasText: "Local setup mode" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Sign in" })).toHaveCount(0);
   await expect(page.getByLabel("Password")).toHaveCount(0);
