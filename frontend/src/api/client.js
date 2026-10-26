@@ -76,6 +76,17 @@ export const departmentApi = {
   update: (id, changes) => api(`/admin/departments/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(changes) }),
 };
 
+export const adminDashboardApi = {
+  summary: (signal, refreshConfiguration = false, includeConfiguration = true) => {
+    const query = new URLSearchParams();
+    if (refreshConfiguration) query.set("refreshConfiguration", "true");
+    if (!includeConfiguration) query.set("includeConfiguration", "false");
+    const search = query.toString();
+    const suffix = search ? `?${search}` : "";
+    return api(`/admin/dashboard${suffix}`, { signal });
+  },
+};
+
 export const usersApi = {
   list: (signal) => api("/admin/users", { signal }),
   create: (user) => api("/admin/users", { method: "POST", body: JSON.stringify(user) }),
@@ -100,6 +111,7 @@ export const displaysApi = {
   list: (signal) => api("/admin/displays", { signal }),
   create: (display) => api("/admin/displays", { method: "POST", body: JSON.stringify(display) }),
   update: (id, changes) => api(`/admin/displays/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(changes) }),
+  delete: (id) => api(`/admin/displays/${encodeURIComponent(id)}`, { method: "DELETE" }),
   pairingCode: (id) => api(`/admin/displays/${encodeURIComponent(id)}/pairing-code`, { method: "POST" }),
   activate: (code) => api("/displays/activate", { method: "POST", body: JSON.stringify({ code }) }),
   async logout() {

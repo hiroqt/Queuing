@@ -28,6 +28,7 @@ if (string.IsNullOrWhiteSpace(connectionString))
 }
 
 builder.Services.AddDbContext<QueueDbContext>(options => options.UseMySQL(connectionString));
+builder.Services.AddMemoryCache();
 builder.Services.AddIdentity<QueueUser, IdentityRole<Guid>>(options =>
     {
         options.User.RequireUniqueEmail = false;

@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { useOutletContext } from "react-router";
 import { kiosksApi } from "../../../api/client.js";
+import AdminActions from "../components/AdminActions.jsx";
+import AdminDialog from "../components/AdminDialog.jsx";
 import AdminFeedback from "../components/AdminFeedback.jsx";
+import AdminListControls from "../components/AdminListControls.jsx";
 import AdminSectionHeader from "../components/AdminSectionHeader.jsx";
+import AdminStatusBadge from "../components/AdminStatusBadge.jsx";
 
 export default function KiosksSection() {
-  const { setKioskPairingCode } = useOutletContext();
+  const { setOneTimeNotice } = useOutletContext();
   const [kiosks, setKiosks] = useState([]);
   const [showCreate, setShowCreate] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -31,6 +36,7 @@ export default function KiosksSection() {
   }, [load]);
 
   async function act(action, success) {
+    setSubmitting(true);
     setError("");
     setMessage("");
     try {
@@ -41,6 +47,8 @@ export default function KiosksSection() {
     } catch (cause) {
       setError(cause.message);
       return null;
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -57,7 +65,15 @@ export default function KiosksSection() {
 
   async function pairingCode(kiosk) {
     const result = await act(() => kiosksApi.pairingCode(kiosk.id), `Pairing code created for ${kiosk.name}.`);
-    if (result) setKioskPairingCode(result.code ?? "");
+    if (result?.code) setOneTimeNotice({
+      kind: "kiosk",
+      title: "Kiosk pairing code",
+      itemName: kiosk.name,
+      secret: result.code,
+      guidance: "Enter this one-time code on the kiosk device. It expires in 10 minutes.",
+      href: "/kiosk/pair",
+      linkLabel: "Open kiosk pairing page in a new tab",
+    });
   }
 
   return (
@@ -67,32 +83,34 @@ export default function KiosksSection() {
         eyebrow="PATIENT SELF-SERVICE"
         title="Kiosks"
         countLabel={`${kiosks.length} registered`}
-        action={<button className="button button-dark" type="button" onClick={() => setShowCreate((value) => !value)}>{showCreate ? "Cancel" : "Add kiosk"}</button>}
+        action={<button className="button button-dark" type="button" onClick={() => setShowCreate(true)} disabled={loading}>Add kiosk</button>}
       />
-      <AdminFeedback error={error} message={message} />
+      <AdminFeedback error={showCreate ? "" : error} message={message} />
       {loading && <p role="status" className="panel-description">Loading kiosks…</p>}
       {!loading && kiosks.length === 0 && <p className="panel-description">No kiosks are registered. Add a kiosk, then create a one-time pairing code for the device.</p>}
-      {showCreate && <form className="admin-inline-form" onSubmit={createKiosk}>
-        <h3>Register kiosk</h3>
-        <label htmlFor="kiosk-name">Kiosk name</label>
-        <input id="kiosk-name" name="name" required minLength="2" maxLength="100" placeholder="e.g. Main lobby" />
-        <button className="button button-dark" type="submit">Save kiosk</button>
-      </form>}
-      <div className="admin-record-list">{kiosks.map((kiosk) => (
-        <article className="admin-record" key={kiosk.id}>
-          <div className="admin-record-summary">
-            <strong>{kiosk.name}</strong>
-            <span>{kiosk.active ? kiosk.paired ? "Paired" : "Needs pairing" : "Revoked"}</span>
-            <span className="enabled-label">{kiosk.active ? "Active" : "Inactive"}</span>
-          </div>
-          <div className="admin-form-actions">
-            {kiosk.active && <button className="text-button" type="button" onClick={() => pairingCode(kiosk)}>Create pairing code</button>}
-            {kiosk.active
-              ? <button className="text-button" type="button" onClick={() => act(() => kiosksApi.update(kiosk.id, { active: false }), `${kiosk.name} revoked.`)}>Revoke</button>
-              : <button className="text-button" type="button" onClick={() => act(() => kiosksApi.update(kiosk.id, { active: true }), `${kiosk.name} reactivated; create a new pairing code.`)}>Reactivate</button>}
-          </div>
-        </article>
-      ))}</div>
+      {showCreate && <AdminDialog title="Register kiosk" onClose={() => setShowCreate(false)} busy={submitting}>
+        <form onSubmit={createKiosk}>
+          <label htmlFor="kiosk-name">Kiosk name</label>
+          <input id="kiosk-name" name="name" required minLength="2" maxLength="100" placeholder="e.g. Main lobby" autoFocus />
+          {error && <p className="action-message" role="alert">{error}</p>}
+          <div className="admin-form-actions"><button className="button button-dark" type="submit" disabled={submitting}>{submitting ? "Saving kiosk…" : "Save kiosk"}</button><button className="button button-quiet" type="button" onClick={() => setShowCreate(false)} disabled={submitting}>Cancel</button></div>
+        </form>
+      </AdminDialog>}
+      {kiosks.length > 0 && <AdminListControls items={kiosks} searchLabel="kiosks" getSearchText={(kiosk) => `${kiosk.name} ${kiosk.active ? kiosk.paired ? "paired" : "needs pairing" : "revoked"}`} getStatus={(item) => item.active ? "active" : "inactive"}>
+        {(filteredKiosks) => <div className="admin-record-list">{filteredKiosks.map((kiosk) => (
+          <article className="admin-record" key={kiosk.id}>
+            <div className="admin-record-summary"><strong>{kiosk.name}</strong><AdminStatusBadge status={kiosk.active ? "active" : "revoked"} /></div>
+            <div className="admin-record-details"><span>{kiosk.active ? kiosk.paired ? "Paired" : "Needs pairing" : "Revoked"}</span></div>
+            <AdminActions>
+              {kiosk.active && <button className="text-button" type="button" disabled={submitting} onClick={() => pairingCode(kiosk)}>Create pairing code</button>}
+              <button className="text-button" type="button" disabled={submitting} onClick={() => {
+                const active = !kiosk.active;
+                return act(() => kiosksApi.update(kiosk.id, { active }), `${kiosk.name} ${active ? "reactivated; create a new pairing code" : "revoked"}.`);
+              }}>{kiosk.active ? "Revoke kiosk" : "Reactivate kiosk"}</button>
+            </AdminActions>
+          </article>
+        ))}</div>}
+      </AdminListControls>}
     </section>
   );
 }

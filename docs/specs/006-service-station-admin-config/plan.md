@@ -1,5 +1,23 @@
 # Plan — SPEC-006
 
+## Approved Admin usability follow-up (2026-10-27)
+
+Keep all six configuration sections on their existing direct routes. Standardize them around compact, Department-aware list views; move create/edit forms into native accessible modal dialogs; group secondary record actions; add conditional list search/status filters; and split Displays from its lobby playlist with an in-page selector. Use searchable checkbox assignment lists for Stations and Staff, and render human-readable Department · Service assignments. Preserve existing API calls and queue/configuration invariants.
+
+Implementation stays in the existing React feature folders and shared Admin components/styles. Update the mocked Admin browser workflow to follow the modal and action-menu controls. No API, database, authorization, or migration work is planned.
+
+## Approved Admin status/one-time secret follow-up (2026-10-27)
+
+Use one shared status badge beside each record name across the six Admin sections, with distinct Active, Inactive, and Revoked styles and the Actions control remaining on the right. Replace the three transient one-time banners with one shared native dialog that shows the temporary username/password or device pairing code, supports clipboard copy with feedback, retains existing instructions, and clears the value on dismissal. Reuse the current API responses and route links; do not persist or log generated secrets.
+
+## Approved Admin search and pagination follow-up (2026-10-27)
+
+Extend the existing `AdminListControls` so every growing Admin collection is searched and paged client-side. Keep its existing per-collection match fields and conditional status filter. Make search explicit by Search button or Enter; combine applied search and status, reset to page one when filters or page size change, default to 10 items with 10/25/50 choices, and show the result range with Previous/Next and page count. Reuse existing API list responses; no service or schema work.
+
+## Approved section-specific search follow-up (2026-10-27)
+
+Use the shared `AdminSearchBar` in Departments, Services, Stations, and Users whenever records exist. Supply a tailored placeholder and keep each section's matching fields in its existing search-text callback; add direct Department names to the User callback for legacy assignments. Preserve shared layout and filtering behavior.
+
 ## Architecture
 
 Extend the existing ASP.NET Core 10 API, EF Core/MySQL model, centralized React API client, and Admin page. Keep a single deployable modular monolith; no new project, service, framework, or frontend redesign. Department remains the channel record. Service and Station each have one Department owner. Station-Service and Station-Staff are explicit join records so relational constraints and replacement behavior remain clear.
