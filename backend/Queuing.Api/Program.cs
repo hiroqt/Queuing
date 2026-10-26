@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -124,6 +125,23 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.Use(async (context, next) =>
 {
+    if (context.User.Identity?.IsAuthenticated != true)
+    {
+        var kioskAuth = await context.AuthenticateAsync(KioskDeviceAuthHandler.SchemeName);
+        if (kioskAuth.Succeeded && kioskAuth.Principal is not null)
+        {
+            context.User = kioskAuth.Principal;
+        }
+        else
+        {
+            var displayAuth = await context.AuthenticateAsync(DisplayDeviceAuthHandler.SchemeName);
+            if (displayAuth.Succeeded && displayAuth.Principal is not null)
+            {
+                context.User = displayAuth.Principal;
+            }
+        }
+    }
+
     if (LocalSetupAccess.IsAdminApiPath(context.Request.Path) &&
         context.User.Identity?.IsAuthenticated != true &&
         LocalSetupAccess.IsAllowed(

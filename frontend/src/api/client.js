@@ -133,8 +133,15 @@ export const kioskApi = {
     headers: { "Idempotency-Key": key },
     body: JSON.stringify(visit),
   }),
-  activate: (code) => api("/kiosks/activate", { method: "POST", body: JSON.stringify({ code }) }),
-  logout: () => api("/kiosk/logout", { method: "POST" }),
+  async activate(code) {
+    const result = await api("/kiosks/activate", { method: "POST", body: JSON.stringify({ code }) });
+    clearRequestToken();
+    return result;
+  },
+  async logout() {
+    await api("/kiosk/logout", { method: "POST" });
+    clearRequestToken();
+  },
 };
 
 export const visitsApi = {
