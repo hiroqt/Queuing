@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { api, authApi, clearRequestToken, displaysApi, queueApi, refreshRequestToken, servicesApi, stationsApi, visitsApi } from "../../src/api/client.js";
+import { api, authApi, clearRequestToken, displaysApi, kioskApi, queueApi, refreshRequestToken, servicesApi, stationsApi, visitsApi } from "../../src/api/client.js";
 
 test("cookie-authenticated mutations obtain and send the antiforgery token", async () => {
   const originalFetch = globalThis.fetch;
@@ -192,6 +192,40 @@ test("admin service and station operations use the shared CSRF-aware API client"
     assert.equal(requests[2].options.method, "PATCH");
     assert.equal(requests[2].options.headers.get("X-CSRF-TOKEN"), "admin-config-token");
     assert.deepEqual(JSON.parse(requests[2].options.body), { serviceIds: ["service-1"], staffUserIds: ["staff-1"] });
+  } finally {
+    globalThis.fetch = originalFetch;
+    clearRequestToken();
+  }
+});
+
+test("kiosk operations call choices, issue with idempotency header, activate, and logout", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (input, options) => {
+    requests.push({ url: String(input), options });
+    if (requests.length === 2) return new Response(JSON.stringify({ requestToken: "kiosk-token" }), { status: 200 });
+    if (requests.length === 5) return new Response(JSON.stringify({ requestToken: "kiosk-post-activate-token" }), { status: 200 });
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  };
+  clearRequestToken();
+
+  try {
+    await kioskApi.choices();
+    await kioskApi.issue({ initialServiceId: "srv-1" }, "kiosk-key-1");
+    await kioskApi.activate("KIOSK-CODE-1");
+    await kioskApi.logout();
+
+    assert.equal(requests[0].url, "/api/v1/kiosk/choices");
+    assert.equal(requests[1].url, "/api/v1/auth/csrf");
+    assert.equal(requests[2].url, "/api/v1/kiosk/visits");
+    assert.equal(requests[2].options.headers.get("Idempotency-Key"), "kiosk-key-1");
+    assert.equal(requests[2].options.headers.get("X-CSRF-TOKEN"), "kiosk-token");
+    assert.deepEqual(JSON.parse(requests[2].options.body), { initialServiceId: "srv-1" });
+    assert.equal(requests[3].url, "/api/v1/kiosks/activate");
+    assert.deepEqual(JSON.parse(requests[3].options.body), { code: "KIOSK-CODE-1" });
+    assert.equal(requests[4].url, "/api/v1/auth/csrf");
+    assert.equal(requests[5].url, "/api/v1/kiosk/logout");
+    assert.equal(requests[5].options.headers.get("X-CSRF-TOKEN"), "kiosk-post-activate-token");
   } finally {
     globalThis.fetch = originalFetch;
     clearRequestToken();
