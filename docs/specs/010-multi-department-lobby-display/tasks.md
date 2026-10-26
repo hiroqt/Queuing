@@ -11,3 +11,5 @@
 - [x] Run frontend unit, lint, build, and focused mocked browser checks; review changed source and migration.
 - [ ] Run .NET build/tests and apply the migration on disposable MySQL 8.x when .NET tooling is available.
 - [ ] Verify audio autoplay gesture, codec support, responsive layout, and keyboard operation on a target display/browser.
+- [x] Add audited Admin display deletion, paired-device revocation notification, and a confirmed Delete display action.
+- [ ] Verify deletion, authorization, and connected-device revocation with the existing MySQL/API and browser workflows.

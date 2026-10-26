@@ -91,6 +91,10 @@ See [SPEC-011](docs/specs/011-service-scoped-staff-access/spec.md). Admin assign
 
 See [SPEC-012](docs/specs/012-department-ticket-numbering/spec.md). Reception and kiosk issue a Department-local daily ticket number; forwarding allocates a number in the destination Department. The clinic visit code remains available for receipt lookup. Lobby video starts muted automatically and needs a direct display action for sound.
 
+### Approved Admin dashboard addendum — 2026-10-27
+
+See [SPEC-014](docs/specs/014-admin-dashboard/spec.md). `/admin` opens an overview of configuration totals, actionable setup checks, and per-Department waiting/called counts. Queue data contains counts only and refreshes every 15 seconds; existing Admin routes and the loopback-only local setup boundary remain in effect.
+
 ### PRD-CQ-009 — Self-service kiosk
 
 See [SPEC-009](docs/specs/009-self-service-kiosk/spec.md). A paired kiosk lets a walk-in choose an active Department, then one of its active Services, and issue an anonymous ticket through the same durable daily sequence as Reception. A single active Service is preselected. Kiosks use a separate revocable device identity and a responsive, touch-first visual direction; they cannot read queues or staff/receipt data. Ticket printing remains a user-initiated browser print action.

@@ -123,3 +123,36 @@ Invalid input or cross-department assignment returns `400`; duplicate names retu
 - User confirmed the approval gate on 2026-10-21: implement this scoped admin configuration after recording the decisions and implementation plan.
 - Service-aware issue/forward behavior is implemented by the follow-up SPEC-008; station-scoped calling remains a separate later slice.
 - Production deployment, shift schedules, and recovery procedures remain outside this feature.
+
+## Follow-up: Admin usability refinement (approved 2026-10-27)
+
+The Admin configuration pages keep their existing React/API contracts and green clinic visual style while adopting a list-first workflow:
+
+- Departments, Services, Stations, Users, Displays, and Kiosks use compact rows with key status/assignment context. Create and edit forms open in accessible modal dialogs; secondary per-record actions are grouped under an Actions control.
+- Services and Stations are grouped by Department. Staff assignment summaries use readable Department and Service names.
+- Search appears only for longer lists except for the Departments, Users, Services, and Stations lists, where it appears whenever records exist. Status filtering appears when both active and inactive records are present. Station and Staff Service assignments use searchable checkbox lists with selected counts.
+- Displays separates registered devices from the lobby video playlist using an in-page selector, so playlist tools are not shown with device configuration.
+- Empty, loading, validation, success, and failure feedback remain understandable. All existing API operations, permissions, queue behavior, display pairing, and data contracts remain unchanged.
+
+Acceptance is limited to these UI workflows and accessibility/responsive behavior; no schema or API changes are included.
+
+## Follow-up: Admin status and one-time credential dialogs (approved 2026-10-27)
+
+- Place each Active, Inactive, or Revoked badge beside its item name across all six Admin lists, leaving the Actions control at the far right. Use distinct accessible status treatments with visible text.
+- Show generated staff credentials, monitor pairing codes, and kiosk pairing codes through one consistent modal dialog. Keep each value in transient Admin layout state only and clear it when the dialog closes.
+- The staff credential dialog includes the username, a visible temporary password with a reveal/hide control, a Copy password action, and the first-login password-change reminder. Pairing dialogs include the item name, pairing code, Copy code action, and the existing device-specific instructions/route.
+- Keep each dialog open until the Admin closes it and provide clear copy success/failure feedback. Preserve one-time API response semantics; do not add persistence or logging for these values.
+
+## Follow-up: Admin list search and pagination (approved 2026-10-27)
+
+- Apply list pagination and explicit search controls to Admin collections that can grow, using the shared list component (Departments, Users, Services, Stations, Displays, Kiosks, and lobby videos).
+- Show 10 rows by default; allow 10, 25, or 50 rows per page. Provide Previous/Next controls, current page, and the visible result range.
+- Search runs when the Admin presses Search or Enter. Preserve the current searchable fields for each collection and combine the applied query with the existing status filter.
+- Reset to page one when search, status, or page size changes. Keep the status filter's existing conditional behavior and keep search hidden on short lists unless a query is in progress, except for the four sections in the approved section-specific search follow-up below.
+- This is client-side presentation over the existing API list responses; no API, database, or queue behavior changes.
+
+## Follow-up: Section-specific Admin search (approved 2026-10-27)
+
+- Always show the shared Search bar when Departments, Services, Stations, or Users has at least one record.
+- Keep one reusable Search component, with a clear section-specific prompt and matching fields: Department name; Service and Department names; Station, Department, Service, and Staff names; and User name, role, assigned Department, and Service names.
+- Include direct Department assignments in User search so legacy assignments without Service assignments are findable.

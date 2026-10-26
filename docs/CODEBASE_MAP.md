@@ -11,6 +11,7 @@ This map describes the current SPEC-005 queue, SPEC-006 Admin configuration, SPE
 | `backend/Queuing.Api/Controllers/AuthController.cs` | Session, login/logout, CSRF token, and forced password change. |
 | `backend/Queuing.Api/Controllers/AdminUsersController.cs` | Admin-provisioned accounts, roles, Service assignments, temporary credential, deletion safeguards, and audit. |
 | `backend/Queuing.Api/Controllers/AdminServicesController.cs` | Admin-only Service configuration and audit. |
+| `backend/Queuing.Api/Controllers/AdminDashboardController.cs` | Admin-only count summary; setup counts are optional and cached for one minute, while queue/display counts are queried for the live dashboard poll; no visit-level queue details. |
 | `backend/Queuing.Api/Controllers/AdminStationsController.cs` | Admin-only physical Station configuration, same-department Service/Staff associations, and audit. |
 | `backend/Queuing.Api/Controllers/DepartmentsController.cs` | Dynamic active department choices and admin create/update/deactivation; lobby refresh invalidation after active-set changes. |
 | `backend/Queuing.Api/Controllers/DisplaysController.cs` | Admin Department/lobby display configuration and pairing; anonymous activation; Department-scoped snapshot and revocation. |
@@ -37,13 +38,13 @@ This map describes the current SPEC-005 queue, SPEC-006 Admin configuration, SPE
 
 | Path | Responsibility |
 |---|---|
-| `frontend/src/App.jsx` | Public Department/lobby display and kiosk routes plus the authenticated workspace route tree and Admin sign-out control. |
-| `frontend/src/api/client.js` | Central same-origin `/api/v1` fetch client, antiforgery token, session, department/user/service/station/display/video/kiosk admin, visit, and queue API methods. Multipart upload leaves its boundary to the browser. |
+| `frontend/src/App.jsx` | Public Department/lobby display and kiosk routes plus the authenticated workspace route tree, Admin dashboard/index route, and Admin sign-out control. |
+| `frontend/src/api/client.js` | Central same-origin `/api/v1` fetch client, antiforgery token, session, Admin dashboard summary with live-only polling, department/user/service/station/display/video/kiosk admin, visit, and queue API methods. Multipart upload leaves its boundary to the browser. |
 | `frontend/src/auth/` | Login with password visibility, session provider with Service assignments, role guards, live password policy feedback, forced password change, and a Vite-only Admin login bypass that can be exited for the current browser tab session. Reception and Staff always use real role sessions. |
-| `frontend/src/features/admin/AdminLayout.jsx` | Admin workspace heading and one-time staff/display/kiosk credential notices; hosts the selected configuration section. |
-| `frontend/src/features/admin/AdminNavigation.jsx`, `adminSections.js` | Collapsible Admin sidebar group and direct routes for Departments, Services, Users & access, Stations, Displays, and Kiosks. |
-| `frontend/src/features/admin/sections/` | One React page per admin configuration area; Departments supports deactivation/reactivation; Users supports account deletion with confirmation; Displays manages Department/lobby devices and the shared lobby video playlist. |
-| `frontend/src/features/admin/components/` | Shared section heading and API feedback UI used by admin pages. |
+| `frontend/src/features/admin/AdminLayout.jsx` | Admin workspace heading and shared one-time staff/display/kiosk credential dialog; hosts the selected dashboard or configuration section. |
+| `frontend/src/features/admin/AdminNavigation.jsx`, `adminSections.js` | Always-visible Admin navigation grouped into Overview, Clinic setup, Access, and Devices, with direct routes for Dashboard and each configuration section. |
+| `frontend/src/features/admin/sections/` | Admin Dashboard presents aggregate configuration counts, setup checks, and count-only Department queue activity; one page per configuration area supports management. Departments supports deactivation/reactivation; Users supports account deletion with confirmation; Displays manages Department/lobby devices and the shared lobby video playlist. |
+| `frontend/src/features/admin/components/` | Shared Admin headings, feedback, accessible dialogs, one-time credential display, status badges, reusable section-configured search bar, paginated list controls, contextual actions, and assignment checklists. |
 | `frontend/src/features/reception/ReceptionPage.jsx` | Department ticket issue with an optional non-identifying reference, explicit visit-code/reference search, duplicate receipt selection, and manual 58 mm print. |
 | `frontend/src/features/department/DepartmentQueuePage.jsx` | Service-scoped Department ticket rows, call-next, no-show requeue, completion, and forwarding. |
 | `frontend/src/features/display/` | One-time pairing route, Department-number monitor, and multi-department lobby board with muted autoplay and a looping playlist. |

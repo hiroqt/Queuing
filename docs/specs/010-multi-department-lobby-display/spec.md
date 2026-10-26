@@ -20,7 +20,7 @@ Add a paired lobby display that presents every active Department alongside its c
 
 ## Scope
 
-- Admin registers, pairs, revokes, and names lobby displays using the existing display workflow; existing department monitors retain their one-Department assignment and behavior.
+- Admin registers, pairs, revokes, and names lobby displays using the existing display workflow; existing department monitors retain their one-Department assignment and behavior. Admin can permanently delete either display type after confirmation; this removes its device record and pairing, while preserving the audit record.
 - Admin can add direct HTTPS video-file URLs, upload supported video files, list playlist entries, and remove an entry. Playlist order is entry creation order; manual reordering and per-screen playlists are excluded.
 - Lobby snapshot returns active Departments, each Department's latest call (or empty), and up to three waiting codes. Queue state remains database-backed and anonymous.
 - Lobby display refreshes from an authorized snapshot after connect/reconnect and queue or Department configuration changes. Queue and Department invalidations use the transactional outbox; a 30-second snapshot refresh covers missed notifications and playlist updates.
@@ -56,6 +56,7 @@ Add a paired lobby display that presents every active Department alongside its c
 7. After one Start action, videos play sequentially with sound and repeat. Queue data stays visible without a playlist or when a video fails. Browser restrictions and unsupported formats produce a usable message and retry path.
 8. Queue changes and Department create/rename/activation changes commit an outbox invalidation for paired displays; reconnect and periodic snapshot refresh reload authoritative state.
 9. The lobby is readable and keyboard-operable at supported display sizes; video controls/start state are accessible and the information layout remains useful while video playback is unavailable.
+10. An Admin can permanently delete a registered display after confirming; the API records the deletion, removes its pairing, notifies a connected device that access was revoked, and returns `404` for a missing display.
 
 ## Out of scope
 
@@ -65,3 +66,9 @@ Add a paired lobby display that presents every active Department alongside its c
 
 - Verify target browser/video codec support during local UI validation; an MP4/WebM extension alone does not guarantee the encoded codec can play on every clinic display device.
 - Backend compilation, MySQL migration application, and API integration remain unverified because this environment does not include the .NET SDK.
+
+## Follow-up: Admin display deletion (approved 2026-10-27)
+
+- Add `DELETE /api/v1/admin/displays/{id}` under the existing Admin-only display policy. Write `display.deleted` to the audit log with the deletion in the same save operation.
+- Remove the display record and its pairing. Notify a currently paired device with the existing `DisplayRevoked` event after the delete commits; notification failure must not report the committed deletion as failed.
+- Place **Delete display** in the row's Actions menu and require an accessible confirmation dialog that explains the device must be registered again to reconnect. Keep the dialog open and show the API error if deletion fails.
