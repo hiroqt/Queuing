@@ -22,6 +22,7 @@ async function mockApi(page, initialRole = null, forcePasswordChange = false, op
   let displayType = options.displayType ?? "Department";
   const waiting = [{ id: "visit-2", visitCode: "Q-002", ticketNumber: "002", serviceId: "service-xray", serviceName: "Imaging", issuedAtUtc: "2026-10-20T00:00:00Z" }];
   const called = [];
+  const completedReceiptSearches = [];
 
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
@@ -162,10 +163,22 @@ async function mockApi(page, initialRole = null, forcePasswordChange = false, op
       const service = availableServices.find((item) => item.id === body.initialServiceId);
       return json({ id: "visit-new", visitCode: "003", ticketNumber: "001", departmentTicketNumber: 1, clinicDate: "2026-10-21", serviceId: service.id, serviceName: service.name, departmentId: service.departmentId, departmentName: service.departmentName, appointmentAtUtc: null, issuedAtUtc: "2026-10-20T00:00:00Z" }, 201);
     }
-    if (path === "/reception/visits/receipt" && method === "GET") return json({ id: "visit-new", visitCode: url.searchParams.get("visitCode"), ticketNumber: "001", departmentTicketNumber: 1, clinicDate: url.searchParams.get("clinicDate"), serviceId: "service-xray", serviceName: "Imaging", departmentId: "dept-xray", departmentName: "X-ray", issuedAtUtc: "2026-10-20T00:00:00Z", isReprint: true });
+    if (path === "/reception/visits/receipt-search" && method === "POST") {
+      if (body.lookupValue === options.delayedSearchValue) await options.delayedSearchGate;
+      completedReceiptSearches.push(body.lookupValue);
+      const matches = options.receiptMatchesByValue?.[body.lookupValue]
+        ?? options.receiptMatches
+        ?? [{ id: "visit-found", visitCode: body.lookupValue, ticketNumber: "001", departmentTicketNumber: 1, clinicDate: body.clinicDate, serviceName: "Imaging", departmentName: "X-ray", issuedAtUtc: "2026-10-20T00:00:00Z" }];
+      return json({ matches, truncated: options.receiptSearchTruncated ?? false });
+    }
+    if (/^\/reception\/visits\/[^/]+\/receipt$/.test(path) && method === "GET") {
+      const id = path.split("/")[3];
+      const match = options.receiptMatches?.find((item) => item.id === id);
+      return json({ id, visitCode: match?.visitCode ?? "003", ticketNumber: match?.ticketNumber ?? "001", departmentTicketNumber: match?.departmentTicketNumber ?? 1, clinicDate: match?.clinicDate ?? "2026-10-21", serviceId: "service-xray", serviceName: match?.serviceName ?? "Imaging", departmentId: "dept-xray", departmentName: match?.departmentName ?? "X-ray", issuedAtUtc: match?.issuedAtUtc ?? "2026-10-20T00:00:00Z", isReprint: true });
+    }
     return route.fulfill({ status: 404, contentType: "application/problem+json", body: JSON.stringify({ detail: `Unhandled mock route: ${method} ${path}` }) });
   });
-  return { requests, departments };
+  return { requests, departments, completedReceiptSearches };
 }
 
 test("sign-in and route guards keep the Reception workspace role scoped", async ({ page }) => {
@@ -331,33 +344,97 @@ test("admin can configure each section through the sidebar and sees only the sel
   await expect(page.getByRole("region", { name: "Stations" })).toHaveCount(0);
 });
 
-test("reception issues a service-linked Asia/Manila appointment and reprints by clinic date and visit code", async ({ page }) => {
+test("reception issues a service-linked appointment and manually reprints by explicit visit-code search", async ({ page }) => {
   const { requests } = await mockApi(page, "Reception");
   await page.addInitScript(() => { window.print = () => { window.printRequested = true; }; });
   await page.goto("/reception");
   await expect(page.getByRole("heading", { name: "Issue a visit" })).toBeVisible();
+  await expect(page.getByLabel("Auto-print")).toHaveCount(0);
+  await expect(page.getByRole("option", { name: "80 mm" })).toHaveCount(0);
   await page.getByLabel("Appointment time Optional").fill("2026-10-20T09:30");
+  await page.getByLabel("Non-identifying reference Optional").fill("REF-A7");
   await page.getByRole("button", { name: "Issue visit" }).click();
   await expect(page.locator(".receipt-number")).toHaveText("001");
   await expect(page.locator(".receipt-reference")).toContainText("003");
+  await expect(page.locator(".ticket-receipt")).not.toContainText("REF-A7");
+  expect(await page.evaluate(() => window.printRequested)).toBeUndefined();
   await expect(page.locator(".reception-toast")).toBeVisible();
-  await expect(page.locator(".reception-toast-message")).toHaveText("Ticket 001 issued for Imaging.");
+  await expect(page.locator(".reception-toast-message")).toHaveText("Ticket 001 issued for X-ray.");
   await page.getByRole("button", { name: "Close notification" }).click();
   await expect(page.locator(".reception-toast")).toHaveCount(0);
   const issued = requests.find((entry) => entry.path === "/visits" && entry.method === "POST");
-  expect(issued.body).toEqual({ initialServiceId: "service-xray", appointmentAtLocal: "2026-10-20T09:30" });
+  expect(issued.body).toEqual({ initialServiceId: "service-xray", appointmentAtLocal: "2026-10-20T09:30", referenceId: "REF-A7" });
   expect(issued.headers["idempotency-key"]).toBeTruthy();
   await page.getByRole("button", { name: "Print / reprint" }).click();
   await expect.poll(() => page.evaluate(() => window.printRequested)).toBe(true);
-  await page.getByRole("textbox", { name: "Visit code" }).fill("003");
+  await page.getByLabel("Search by").selectOption("visitCode");
+  await page.getByLabel("Visit code", { exact: true }).fill("003");
   await page.getByLabel("Clinic date").fill("2026-10-21");
   await page.getByRole("button", { name: "Find visit" }).click();
+  await page.getByRole("button", { name: /001 · X-ray/ }).click();
   await expect(page.locator(".receipt-number")).toHaveText("001");
   await expect(page.locator(".receipt-reference")).toContainText("003");
   await expect(page.locator(".receipt-reprint-banner")).toBeVisible();
   await expect(page.locator(".reception-reprint-tag")).toHaveText("Reprint");
-  const receiptLookup = requests.find((entry) => entry.path.startsWith("/reception/visits/receipt"));
-  expect(receiptLookup).toMatchObject({ path: "/reception/visits/receipt", query: "?visitCode=003&clinicDate=2026-10-21" });
+  const receiptSearch = requests.find((entry) => entry.path === "/reception/visits/receipt-search");
+  expect(receiptSearch).toMatchObject({ path: "/reception/visits/receipt-search", query: "", method: "POST", body: { lookupType: "visitCode", lookupValue: "003", clinicDate: "2026-10-21" } });
+  expect(requests.find((entry) => entry.path === "/reception/visits/visit-found/receipt").method).toBe("GET");
+});
+
+test("reception shows duplicate non-identifying-reference matches and lets the user choose", async ({ page }) => {
+  const { requests } = await mockApi(page, "Reception", false, { receiptMatches: [
+    { id: "visit-earlier", visitCode: "014", ticketNumber: "004", departmentTicketNumber: 4, clinicDate: "2026-10-21", serviceName: "Imaging", departmentName: "X-ray", issuedAtUtc: "2026-10-20T00:00:00Z" },
+    { id: "visit-later", visitCode: "015", ticketNumber: "002", departmentTicketNumber: 2, clinicDate: "2026-10-21", serviceName: "ECG", departmentName: "ECG", issuedAtUtc: "2026-10-20T01:00:00Z" },
+  ] });
+  await page.goto("/reception");
+  await page.getByLabel("Search by").selectOption("referenceId");
+  await page.getByLabel("Non-identifying reference", { exact: true }).fill("REF-A7");
+  await page.getByLabel("Clinic date").fill("2026-10-21");
+  await page.getByRole("button", { name: "Find visit" }).click();
+  await expect(page.getByRole("button", { name: /004 · X-ray/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /002 · ECG/ })).toBeVisible();
+  await page.getByLabel("Non-identifying reference", { exact: true }).fill("REF-B8");
+  await expect(page.getByRole("button", { name: /004 · X-ray/ })).toHaveCount(0);
+  await page.getByLabel("Non-identifying reference", { exact: true }).fill("REF-A7");
+  await page.getByLabel("Clinic date").fill("2026-10-22");
+  await expect(page.getByRole("button", { name: /002 · ECG/ })).toHaveCount(0);
+  await page.getByLabel("Clinic date").fill("2026-10-21");
+  await page.getByRole("button", { name: "Find visit" }).click();
+  await expect(page.getByRole("button", { name: /004 · X-ray/ })).toBeVisible();
+  await page.getByRole("button", { name: /002 · ECG/ }).click();
+  await expect(page.locator(".receipt-reference")).toContainText("015");
+  await expect(page.locator(".ticket-receipt")).not.toContainText("REF-A7");
+  expect(requests.find((entry) => entry.path === "/reception/visits/receipt-search")).toMatchObject({
+    method: "POST",
+    query: "",
+    body: { lookupType: "referenceId", lookupValue: "REF-A7", clinicDate: "2026-10-21" },
+  });
+  expect(requests.find((entry) => entry.path === "/reception/visits/visit-later/receipt")).toBeTruthy();
+});
+
+test("a slower earlier receipt search cannot replace matches for the current criteria", async ({ page }) => {
+  let releaseOlderSearch;
+  const delayedSearchGate = new Promise((resolve) => { releaseOlderSearch = resolve; });
+  const { completedReceiptSearches } = await mockApi(page, "Reception", false, {
+    delayedSearchValue: "REF-A7",
+    delayedSearchGate,
+    receiptMatchesByValue: {
+      "REF-A7": [{ id: "visit-stale", visitCode: "011", ticketNumber: "011", departmentName: "X-ray", serviceName: "Imaging", clinicDate: "2026-10-21", issuedAtUtc: "2026-10-20T00:00:00Z" }],
+      "REF-B8": [{ id: "visit-current", visitCode: "012", ticketNumber: "012", departmentName: "ECG", serviceName: "ECG", clinicDate: "2026-10-21", issuedAtUtc: "2026-10-20T00:00:00Z" }],
+    },
+  });
+  await page.goto("/reception");
+  await page.getByLabel("Search by").selectOption("referenceId");
+  await page.getByLabel("Non-identifying reference", { exact: true }).fill("REF-A7");
+  await page.getByLabel("Clinic date").fill("2026-10-21");
+  await page.getByRole("button", { name: "Find visit" }).click();
+  await page.getByLabel("Non-identifying reference", { exact: true }).fill("REF-B8");
+  await page.getByRole("button", { name: "Find visit" }).click();
+  await expect(page.getByRole("button", { name: /012 · ECG/ })).toBeVisible();
+  releaseOlderSearch();
+  await expect.poll(() => completedReceiptSearches).toContain("REF-A7");
+  await expect(page.getByRole("button", { name: /012 · ECG/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /011 · X-ray/ })).toHaveCount(0);
 });
 
 test("reception explains when no active services are configured", async ({ page }) => {

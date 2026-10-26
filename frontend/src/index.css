@@ -208,16 +208,10 @@ form .button { justify-self: start; margin-top: 4px; }
 .reception-page > .page-heading { align-items: center; margin-top: 10px; margin-bottom: 12px; }
 .reception-page > .page-heading h1 { font-size: 24px; margin: 2px 0; }
 .reception-page > .page-heading p { margin: 2px 0 0; font-size: 11px; }
-.reception-desk-settings { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
-.reception-setting-badge { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 11px; }
-.reception-setting-badge strong { color: var(--ink); font-weight: 600; }
-.reception-settings-row { display: inline-flex; align-items: center; gap: 10px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); font-size: 11px; color: var(--ink); }
-.reception-settings-divider { color: var(--line); }
 .reception-ticket-header-actions { display: flex; align-items: center; gap: 8px; }
 .reception-ticket-header-actions .button-sm { border: 1px solid var(--line); background: var(--canvas); color: var(--ink); font-weight: 500; }
 .reception-ticket-header-actions .button-sm:hover { background: #e2e8e3; color: var(--ink); }
 .button-sm { min-height: 26px !important; height: 26px !important; padding: 0 9px !important; font-size: 10px !important; border-radius: 4px !important; line-height: 24px !important; }
-.receipt-meta { margin: 2px 0; color: #53615c; font-size: 11px; font-variant-numeric: tabular-nums; }
 .reception-numbering { display: grid; min-width: 265px; gap: 5px; padding: 13px 17px; border-left: 3px solid var(--amber); border-radius: 4px; background: #fffdf7; }
 .reception-numbering strong { color: var(--ink); font-size: 13px; }
 .reception-numbering > span:last-child { color: var(--muted); font-size: 10px; }
@@ -371,9 +365,6 @@ form .button { justify-self: start; margin-top: 4px; }
 .reception-reprint-tag { padding: 4px 7px; border-radius: 3px; background: #fff3e0; color: #b75300; font-size: 9px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
 .receipt-reprint-banner { margin-bottom: 8px; padding: 4px 8px; border: 1px dashed #b75300; border-radius: 4px; background: #fff9db; color: #b75300; font-size: 10px; font-weight: 750; letter-spacing: 0.1em; text-align: center; }
 .reception-desk-options { display: flex; align-items: center; gap: 12px; margin-top: 6px; font-size: 11px; color: var(--muted); }
-.reception-option-toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
-.reception-option-select { display: inline-flex; align-items: center; gap: 6px; }
-.reception-option-select select { font-size: 11px; min-height: 24px; height: 24px; padding: 1px 5px; border-radius: 3px; border: 1px solid #cbd4cd; background: #fff; }
 .reception-ticket-empty { flex: 1; display: grid; min-height: 220px; align-content: center; justify-items: center; gap: 6px; margin-top: 12px; padding: 18px; border: 1px dashed #cbd4cd; border-radius: 5px; background: #fbfcf9; text-align: center; }
 .reception-ticket-empty > span { color: #a4b0a9; font-family: Georgia, "Times New Roman", serif; font-size: 24px; letter-spacing: .12em; }
 .reception-ticket-empty strong { color: var(--ink); font-size: 12px; }
@@ -492,6 +483,12 @@ input[type="checkbox"] { width: 18px; min-height: 18px; margin: 0; accent-color:
 .lookup-form { display: flex; flex-direction: column; flex: 1; gap: 11px; margin-top: 13px; padding-top: 0; }
 .reception-find-button { width: 100%; min-height: 40px; margin-top: auto !important; border-color: #9bac9f; background: #fff; color: var(--evergreen); }
 .reception-find-button:hover { background: #f1f5f1; }
+.receipt-match-list { display: grid; gap: 7px; margin-top: 12px; }
+.receipt-match { display: grid; width: 100%; gap: 3px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 5px; background: #fff; color: var(--ink); text-align: left; cursor: pointer; }
+.receipt-match:hover, .receipt-match:focus-visible { border-color: var(--green); background: #f7faf7; }
+.receipt-match:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.receipt-match strong { font-size: 11px; }
+.receipt-match span { color: var(--muted); font-size: 10px; line-height: 1.4; }
 .department-picker { display: flex; max-width: 480px; align-items: center; gap: 14px; margin: 0 0 22px; }
 .department-picker label { flex: 0 0 auto; font-size: 12px; font-weight: 650; }
 .called-visit { display: grid; gap: 9px; padding: 14px 0; border-top: 1px solid #edf0ec; }
@@ -577,11 +574,10 @@ input[type="checkbox"] { width: 18px; min-height: 18px; margin: 0; accent-color:
 }
 
 @media print {
-  @page { size: auto; margin: 4mm; }
+  @page { size: 58mm auto; margin: 4mm; }
   body * { visibility: hidden !important; }
   .ticket-receipt, .ticket-receipt * { visibility: visible !important; }
   .ticket-receipt { position: absolute; top: 0; left: 0; width: 50mm; margin: 0; padding: 2mm; border: 0; background: #fff; }
-  .ticket-receipt.print-80mm { width: 72mm; }
   .ticket-receipt .no-print { display: none !important; }
   .receipt-heading { justify-content: center; text-align: center; }
   .receipt-heading .eyebrow, .receipt-heading h2 { display: none; }
@@ -639,7 +635,7 @@ input[type="checkbox"] { width: 18px; min-height: 18px; margin: 0; accent-color:
 
 @media (max-width: 760px) {
   .reception-side { grid-template-columns: minmax(0, 1fr); }
-  .reception-numbering, .reception-desk-settings { width: 100%; min-width: 0; align-items: flex-start; }
+  .reception-numbering { width: 100%; min-width: 0; align-items: flex-start; }
 }
 
 @media (max-width: 460px) {

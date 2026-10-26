@@ -134,7 +134,7 @@ test("queue transitions carry idempotency keys and only forward a supplied local
   }
 });
 
-test("visit operations use active services for issue and clinic-date receipt lookup", async () => {
+test("visit operations use explicit receipt lookup types in request bodies", async () => {
   const originalFetch = globalThis.fetch;
   const requests = [];
   globalThis.fetch = async (input, options) => {
@@ -147,8 +147,9 @@ test("visit operations use active services for issue and clinic-date receipt loo
   try {
     await servicesApi.available();
     await visitsApi.issue({ initialServiceId: "service-xray", appointmentAtLocal: "2026-10-21T09:30" }, "issue-key");
-    await visitsApi.receipt("001", "2026-10-21");
-    await visitsApi.receipt("CH-1042", "2026-10-21");
+    await visitsApi.searchReceipts({ lookupType: "visitCode", lookupValue: "1000", clinicDate: "2026-10-21" });
+    await visitsApi.searchReceipts({ lookupType: "referenceId", lookupValue: "REF-A7", clinicDate: "2026-10-21" });
+    await visitsApi.getReceipt("visit-selected");
 
     assert.equal(requests[0].url, "/api/v1/services/available");
     assert.equal(requests[1].url, "/api/v1/visits");
@@ -157,8 +158,12 @@ test("visit operations use active services for issue and clinic-date receipt loo
       initialServiceId: "service-xray",
       appointmentAtLocal: "2026-10-21T09:30",
     });
-    assert.equal(requests[2].url, "/api/v1/reception/visits/receipt?visitCode=001&clinicDate=2026-10-21");
-    assert.equal(requests[3].url, "/api/v1/reception/visits/receipt?referenceId=CH-1042&clinicDate=2026-10-21");
+    assert.equal(requests[2].url, "/api/v1/reception/visits/receipt-search");
+    assert.equal(requests[2].options.method, "POST");
+    assert.deepEqual(JSON.parse(requests[2].options.body), { lookupType: "visitCode", lookupValue: "1000", clinicDate: "2026-10-21" });
+    assert.equal(requests[3].url, "/api/v1/reception/visits/receipt-search");
+    assert.deepEqual(JSON.parse(requests[3].options.body), { lookupType: "referenceId", lookupValue: "REF-A7", clinicDate: "2026-10-21" });
+    assert.equal(requests[4].url, "/api/v1/reception/visits/visit-selected/receipt");
   } finally {
     globalThis.fetch = originalFetch;
     clearRequestToken();
