@@ -10,7 +10,14 @@ using Queuing.Api.Hubs;
 using Queuing.Api.Services;
 
 var bootstrapAdmin = args.Contains("--bootstrap-admin", StringComparer.Ordinal);
-var appArgs = args.Where(argument => !string.Equals(argument, "--bootstrap-admin", StringComparison.Ordinal)).ToArray();
+var applyMigrations = args.Contains("--apply-migrations", StringComparer.Ordinal);
+if (bootstrapAdmin && applyMigrations)
+{
+    throw new InvalidOperationException("Choose either --bootstrap-admin or --apply-migrations for this run.");
+}
+var appArgs = args.Where(argument =>
+    !string.Equals(argument, "--bootstrap-admin", StringComparison.Ordinal) &&
+    !string.Equals(argument, "--apply-migrations", StringComparison.Ordinal)).ToArray();
 var builder = WebApplication.CreateBuilder(appArgs);
 
 var connectionString = builder.Configuration.GetConnectionString("Queueing");
@@ -147,10 +154,13 @@ if (bootstrapAdmin)
     return;
 }
 
-await using (var migrationScope = app.Services.CreateAsyncScope())
+if (applyMigrations)
 {
+    await using var migrationScope = app.Services.CreateAsyncScope();
     var db = migrationScope.ServiceProvider.GetRequiredService<QueueDbContext>();
     await db.Database.MigrateAsync();
+    Console.WriteLine("Pending database migrations applied.");
+    return;
 }
 
 await app.RunAsync();

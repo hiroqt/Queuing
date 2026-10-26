@@ -87,7 +87,7 @@ public sealed class VisitIssuanceService(QueueDbContext db, TimeProvider clock)
         visit.CurrentStepId = step.Id;
         var receipt = new IssuedVisitDto(
             visit.Id, visit.VisitCode, clinicDate, service.Id, service.Name, service.DepartmentId,
-            service.DepartmentName, step.AppointmentAtUtc, visit.IssuedAtUtc, departmentTicketNumber, ReferenceId: referenceId);
+            service.DepartmentName, step.AppointmentAtUtc, visit.IssuedAtUtc, departmentTicketNumber);
         VisitCommandSupport.SaveCommand(db, clock, scope, key, requestHash, visit.Id, receipt);
         VisitCommandSupport.AddAudit(db, clock, userId, correlationId, "visit.issued", "visit", visit.Id, kioskDeviceId);
         VisitCommandSupport.AddOutbox(db, clock, visit.Id, service.DepartmentId);
@@ -105,7 +105,7 @@ public sealed record VisitIssueResult(IssuedVisitDto? Receipt, string? Error, in
 }
 
 public sealed record IssueVisitRequest(Guid InitialServiceId, string? AppointmentAtLocal, string? ReferenceId = null);
-public sealed record IssuedVisitDto(Guid Id, string VisitCode, DateOnly ClinicDate, Guid? ServiceId, string? ServiceName, Guid DepartmentId, string DepartmentName, DateTimeOffset? AppointmentAtUtc, DateTimeOffset IssuedAtUtc, int? DepartmentTicketNumber = null, bool IsReprint = false, string? ReferenceId = null)
+public sealed record IssuedVisitDto(Guid Id, string VisitCode, DateOnly ClinicDate, Guid? ServiceId, string? ServiceName, Guid DepartmentId, string DepartmentName, DateTimeOffset? AppointmentAtUtc, DateTimeOffset IssuedAtUtc, int? DepartmentTicketNumber = null, bool IsReprint = false)
 {
     public string TicketNumber => DepartmentTicketNumber?.ToString("D3", CultureInfo.InvariantCulture) ?? VisitCode;
 }
